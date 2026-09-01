@@ -8,8 +8,15 @@ using UnityEngine.SceneManagement;
 [InitializeOnLoad]
 public static class ConfigureDuckCharacters
 {
+    private const string ScenePath = "Assets/Scenes/SampleScene.unity";
+    private const string SceneName = "SampleScene";
     private const string ControllerPath = "Assets/people/1/Meshy_AI_11_biped_Animation_Walking_withSkin.controller";
-    private const string Duck2AvatarPath = "Assets/people/2/Meshy_AI_22_biped/Meshy_AI_22_biped_Animation_Walking_withSkin.fbx";
+    private static readonly DuckCharacterConfig[] DuckCharacters =
+    {
+        new DuckCharacterConfig("Duck2", "Assets/people/2/Meshy_AI_22_biped/Meshy_AI_22_biped_Animation_Walking_withSkin.fbx"),
+        new DuckCharacterConfig("Duck3", "Assets/people/3/Meshy_AI_33_biped/Meshy_AI_33_biped_Animation_Walking_withSkin.fbx"),
+    };
+
     private static readonly string[] DuckMoverFields =
     {
         "walkSpeed",
@@ -24,10 +31,16 @@ public static class ConfigureDuckCharacters
 
     static ConfigureDuckCharacters()
     {
-        EditorApplication.delayCall += Configure;
+        EditorApplication.delayCall += ConfigureActiveScene;
     }
 
-    private static void Configure()
+    public static void ConfigureSampleSceneForBatchMode()
+    {
+        Scene scene = EditorSceneManager.OpenScene(ScenePath, OpenSceneMode.Single);
+        ConfigureScene(scene);
+    }
+
+    private static void ConfigureActiveScene()
     {
         if (EditorApplication.isPlayingOrWillChangePlaymode)
         {
@@ -35,66 +48,97 @@ public static class ConfigureDuckCharacters
         }
 
         Scene scene = SceneManager.GetActiveScene();
-        if (!scene.isLoaded || scene.name != "SampleScene")
+        if (!scene.isLoaded || scene.name != SceneName)
         {
             return;
         }
 
+        ConfigureScene(scene);
+    }
+
+    private static void ConfigureScene(Scene scene)
+    {
         GameObject duck1 = FindInScene(scene, "Duck1");
-        GameObject duck2 = FindInScene(scene, "Duck2");
-        if (duck1 == null || duck2 == null)
+        if (duck1 == null)
         {
             return;
         }
 
         AnimatorController controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
-        Avatar duck2Avatar = AssetDatabase.LoadAllAssetsAtPath(Duck2AvatarPath).OfType<Avatar>().FirstOrDefault();
         DuckMover duck1Mover = duck1.GetComponent<DuckMover>();
         CapsuleCollider duck1Collider = duck1.GetComponent<CapsuleCollider>();
         bool changed = false;
 
-        Animator duck2Animator = GetOrAddComponent<Animator>(duck2, ref changed);
-        if (duck2Animator.runtimeAnimatorController != controller)
+        foreach (DuckCharacterConfig character in DuckCharacters)
         {
-            duck2Animator.runtimeAnimatorController = controller;
-            changed = true;
-        }
+            GameObject duck = FindInScene(scene, character.Name);
+            if (duck == null)
+            {
+                continue;
+            }
 
-        if (duck2Avatar != null && duck2Animator.avatar != duck2Avatar)
-        {
-            duck2Animator.avatar = duck2Avatar;
-            changed = true;
+            Avatar avatar = AssetDatabase.LoadAllAssetsAtPath(character.AvatarPath).OfType<Avatar>().FirstOrDefault();
+            changed |= ConfigureDuck(duck, controller, avatar, duck1Mover, duck1Collider);
         }
-
-        if (duck2Animator.applyRootMotion)
-        {
-            duck2Animator.applyRootMotion = false;
-            changed = true;
-        }
-
-        DuckMover duck2Mover = GetOrAddComponent<DuckMover>(duck2, ref changed);
-        if (duck1Mover != null)
-        {
-            changed |= CopyDuckMoverSettings(duck1Mover, duck2Mover);
-        }
-
-        CapsuleCollider duck2Collider = GetOrAddComponent<CapsuleCollider>(duck2, ref changed);
-        if (duck1Collider != null)
-        {
-            changed |= CopyCapsuleCollider(duck1Collider, duck2Collider);
-        }
-
-        Rigidbody duck2Body = GetOrAddComponent<Rigidbody>(duck2, ref changed);
-        changed |= ConfigureBody(duck2Body);
 
         if (!changed)
         {
             return;
         }
 
-        EditorUtility.SetDirty(duck2);
         EditorSceneManager.MarkSceneDirty(scene);
         EditorSceneManager.SaveScene(scene);
+    }
+
+    private static bool ConfigureDuck(
+        GameObject duck,
+        AnimatorController controller,
+        Avatar avatar,
+        DuckMover sourceMover,
+        CapsuleCollider sourceCollider)
+    {
+        bool changed = false;
+
+        Animator animator = GetOrAddComponent<Animator>(duck, ref changed);
+        if (animator.runtimeAnimatorController != controller)
+        {
+            animator.runtimeAnimatorController = controller;
+            changed = true;
+        }
+
+        if (avatar != null && animator.avatar != avatar)
+        {
+            animator.avatar = avatar;
+            changed = true;
+        }
+
+        if (animator.applyRootMotion)
+        {
+            animator.applyRootMotion = false;
+            changed = true;
+        }
+
+        DuckMover mover = GetOrAddComponent<DuckMover>(duck, ref changed);
+        if (sourceMover != null)
+        {
+            changed |= CopyDuckMoverSettings(sourceMover, mover);
+        }
+
+        CapsuleCollider collider = GetOrAddComponent<CapsuleCollider>(duck, ref changed);
+        if (sourceCollider != null)
+        {
+            changed |= CopyCapsuleCollider(sourceCollider, collider);
+        }
+
+        Rigidbody body = GetOrAddComponent<Rigidbody>(duck, ref changed);
+        changed |= ConfigureBody(body);
+
+        if (changed)
+        {
+            EditorUtility.SetDirty(duck);
+        }
+
+        return changed;
     }
 
     private static GameObject FindInScene(Scene scene, string name)
@@ -213,5 +257,17 @@ public static class ConfigureDuckCharacters
         }
 
         return changed;
+    }
+
+    private readonly struct DuckCharacterConfig
+    {
+        public DuckCharacterConfig(string name, string avatarPath)
+        {
+            Name = name;
+            AvatarPath = avatarPath;
+        }
+
+        public string Name { get; }
+        public string AvatarPath { get; }
     }
 }
