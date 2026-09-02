@@ -186,13 +186,14 @@ public class DuckMover : MonoBehaviour
 
     private Vector3 GetMoveDirection(Vector2 input)
     {
-        if (!cameraRelativeMovement || mainCamera == null)
+        Camera movementCamera = GetMovementCamera();
+        if (!cameraRelativeMovement || movementCamera == null)
         {
             return new Vector3(input.x, 0f, input.y);
         }
 
-        Vector3 forward = mainCamera.transform.forward;
-        Vector3 right = mainCamera.transform.right;
+        Vector3 forward = movementCamera.transform.forward;
+        Vector3 right = movementCamera.transform.right;
         forward.y = 0f;
         right.y = 0f;
 
@@ -200,6 +201,16 @@ public class DuckMover : MonoBehaviour
         right.Normalize();
 
         return (forward * input.y + right * input.x).normalized;
+    }
+
+    private Camera GetMovementCamera()
+    {
+        if (mainCamera == null || !mainCamera.isActiveAndEnabled)
+        {
+            mainCamera = Camera.main;
+        }
+
+        return mainCamera;
     }
 
     private void FaceDirection(Vector3 direction)
