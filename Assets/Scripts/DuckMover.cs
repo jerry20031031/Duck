@@ -12,6 +12,10 @@ public class DuckMover : MonoBehaviour
     [SerializeField] private string runningStateName = "Running";
     [SerializeField] private string jumpStateName = "jump";
 
+    private const string SpeedParameterName = "Speed";
+    private const string GroundedParameterName = "Grounded";
+    private const string JumpParameterName = "Jump";
+
     private Camera mainCamera;
     private Animator animator;
     private Rigidbody body;
@@ -19,6 +23,9 @@ public class DuckMover : MonoBehaviour
     private int walkingStateHash;
     private int runningStateHash;
     private int jumpStateHash;
+    private int speedParameterHash;
+    private int groundedParameterHash;
+    private int jumpParameterHash;
     private int currentStateHash;
 
     private bool isGrounded = true;
@@ -39,6 +46,7 @@ public class DuckMover : MonoBehaviour
         if (animator != null)
         {
             animator.applyRootMotion = false;
+            SyncAnimatorParameters();
             PlayState(GetGroundedState());
         }
     }
@@ -59,8 +67,10 @@ public class DuckMover : MonoBehaviour
         if (keyboard.spaceKey.wasPressedThisFrame && isGrounded)
         {
             jumpQueued = true;
+            SetJumpTrigger();
         }
 
+        SyncAnimatorParameters();
         PlayState(GetAnimationState());
     }
 
@@ -81,6 +91,7 @@ public class DuckMover : MonoBehaviour
         {
             velocity.y = jumpSpeed;
             isGrounded = false;
+            SyncAnimatorParameters();
         }
 
         jumpQueued = false;
@@ -100,6 +111,7 @@ public class DuckMover : MonoBehaviour
             if (Vector3.Dot(contact.normal, Vector3.up) > 0.55f)
             {
                 isGrounded = true;
+                SyncAnimatorParameters();
                 return;
             }
         }
@@ -108,6 +120,7 @@ public class DuckMover : MonoBehaviour
     private void OnCollisionExit(Collision collision)
     {
         isGrounded = false;
+        SyncAnimatorParameters();
     }
 
     private void ConfigurePhysics()
@@ -130,6 +143,9 @@ public class DuckMover : MonoBehaviour
         walkingStateHash = Animator.StringToHash(walkingStateName);
         runningStateHash = Animator.StringToHash(runningStateName);
         jumpStateHash = Animator.StringToHash(jumpStateName);
+        speedParameterHash = Animator.StringToHash(SpeedParameterName);
+        groundedParameterHash = Animator.StringToHash(GroundedParameterName);
+        jumpParameterHash = Animator.StringToHash(JumpParameterName);
     }
 
     private int GetAnimationState()
@@ -258,6 +274,35 @@ public class DuckMover : MonoBehaviour
     private bool HasState(int stateHash)
     {
         return animator != null && animator.HasState(0, stateHash);
+    }
+
+    private void SyncAnimatorParameters()
+    {
+        if (animator == null)
+        {
+            return;
+        }
+
+        animator.SetFloat(speedParameterHash, GetAnimatorSpeed());
+        animator.SetBool(groundedParameterHash, isGrounded);
+    }
+
+    private float GetAnimatorSpeed()
+    {
+        if (!hasMoveInput)
+        {
+            return 0f;
+        }
+
+        return wantsToRun ? 1f : 0.5f;
+    }
+
+    private void SetJumpTrigger()
+    {
+        if (animator != null)
+        {
+            animator.SetTrigger(jumpParameterHash);
+        }
     }
 
     private static Vector3 FlattenDirection(Vector3 direction)
