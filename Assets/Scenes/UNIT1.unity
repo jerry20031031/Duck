@@ -4524,15 +4524,15 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: 871d6d75a2175fa4193b90be91c2b000, type: 3}
       propertyPath: m_LocalScale.x
-      value: 500
+      value: 2000
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 871d6d75a2175fa4193b90be91c2b000, type: 3}
       propertyPath: m_LocalScale.y
-      value: 500
+      value: 2000
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 871d6d75a2175fa4193b90be91c2b000, type: 3}
       propertyPath: m_LocalScale.z
-      value: 500
+      value: 2000
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 871d6d75a2175fa4193b90be91c2b000, type: 3}
       propertyPath: m_LocalPosition.x
@@ -4540,11 +4540,11 @@ PrefabInstance:
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 871d6d75a2175fa4193b90be91c2b000, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 0.82575655
+      value: 6.4
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 871d6d75a2175fa4193b90be91c2b000, type: 3}
       propertyPath: m_LocalPosition.z
-      value: -12.553805
+      value: -20.57
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: 871d6d75a2175fa4193b90be91c2b000, type: 3}
       propertyPath: m_LocalRotation.w
@@ -15949,7 +15949,7 @@ MonoBehaviour:
   jumpStateName: jump
   pickupWeaponName: weapon1
   weaponPickupDistance: 1.25
-  heldWeaponLocalPosition: {x: 0.05, y: 0.02, z: 0.02}
+  heldWeaponLocalPosition: {x: 0.08, y: 0.03, z: 0.02}
   heldWeaponLocalScale: {x: 1, y: 1, z: 1}
 --- !u!4 &443501897 stripped
 Transform:
@@ -40376,7 +40376,7 @@ MonoBehaviour:
   jumpStateName: jump
   pickupWeaponName: weapon1
   weaponPickupDistance: 1.25
-  heldWeaponLocalPosition: {x: 0.05, y: 0.02, z: 0.02}
+  heldWeaponLocalPosition: {x: 0.08, y: 0.03, z: 0.02}
   heldWeaponLocalScale: {x: 1, y: 1, z: 1}
 --- !u!4 &1033028308 stripped
 Transform:
@@ -42414,7 +42414,7 @@ MonoBehaviour:
   jumpStateName: jump
   pickupWeaponName: weapon1
   weaponPickupDistance: 1.25
-  heldWeaponLocalPosition: {x: 0.05, y: 0.02, z: 0.02}
+  heldWeaponLocalPosition: {x: 0.08, y: 0.03, z: 0.02}
   heldWeaponLocalScale: {x: 1, y: 1, z: 1}
 --- !u!136 &1094653429
 CapsuleCollider:
@@ -77815,23 +77815,23 @@ PrefabInstance:
     m_Modifications:
     - target: {fileID: -8679921383154817045, guid: cf7523c06e4254248ac4821402572c7b, type: 3}
       propertyPath: m_LocalScale.x
-      value: 562.8
+      value: 662.47
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: cf7523c06e4254248ac4821402572c7b, type: 3}
       propertyPath: m_LocalScale.y
-      value: 562.8
+      value: 662.47
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: cf7523c06e4254248ac4821402572c7b, type: 3}
       propertyPath: m_LocalScale.z
-      value: 562.8
+      value: 662.47
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: cf7523c06e4254248ac4821402572c7b, type: 3}
       propertyPath: m_LocalPosition.x
-      value: 5.76
+      value: 6.78
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: cf7523c06e4254248ac4821402572c7b, type: 3}
       propertyPath: m_LocalPosition.y
-      value: 3.94
+      value: 4.88
       objectReference: {fileID: 0}
     - target: {fileID: -8679921383154817045, guid: cf7523c06e4254248ac4821402572c7b, type: 3}
       propertyPath: m_LocalPosition.z
