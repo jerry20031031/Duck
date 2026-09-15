@@ -9,6 +9,7 @@ public static class ConfigureDuckAnimator
     private const string ControllerPath = "Assets/people/1/Meshy_AI_11_biped_Animation_Walking_withSkin.controller";
     private const string IdleClipPath = "Assets/motion/Idle.fbx";
     private const string WalkingClipPath = "Assets/motion/Meshy_AI_Sunny_Duckling_biped_Character_output@Walking.fbx";
+    private const string WeaponWalkingClipPath = "Assets/motion/weapon walk.fbx";
     private const string RunningClipPath = "Assets/motion/Fast Run.fbx";
     private const string JumpClipPath = "Assets/motion/Jump.fbx";
     private const string SpeedParameter = "Speed";
@@ -26,11 +27,12 @@ public static class ConfigureDuckAnimator
     {
         AnimationClip idleClip = LoadClip(IdleClipPath, "mixamo.com");
         AnimationClip walkingClip = LoadClip(WalkingClipPath);
+        AnimationClip weaponWalkingClip = LoadClip(WeaponWalkingClipPath);
         AnimationClip runningClip = LoadClip(RunningClipPath, "mixamo.com");
         AnimationClip jumpClip = LoadClip(JumpClipPath, "mixamo.com");
         AnimatorController controller = AssetDatabase.LoadAssetAtPath<AnimatorController>(ControllerPath);
 
-        if (idleClip == null || walkingClip == null || runningClip == null || jumpClip == null || controller == null || controller.layers.Length == 0)
+        if (idleClip == null || walkingClip == null || weaponWalkingClip == null || runningClip == null || jumpClip == null || controller == null || controller.layers.Length == 0)
         {
             return;
         }
@@ -38,12 +40,14 @@ public static class ConfigureDuckAnimator
         bool changed = false;
         changed |= EnsureClipLoops(IdleClipPath);
         changed |= EnsureClipLoops(WalkingClipPath);
+        changed |= EnsureClipLoops(WeaponWalkingClipPath);
         changed |= EnsureClipLoops(RunningClipPath);
         changed |= SetClipLooping(JumpClipPath, false);
 
         ChildAnimatorState[] states = controller.layers[0].stateMachine.states;
         AnimatorState idleState = states.FirstOrDefault(state => state.state.name == "idle").state;
         AnimatorState walkingState = states.FirstOrDefault(state => state.state.name == "Walking").state;
+        AnimatorState weaponWalkingState = states.FirstOrDefault(state => state.state.name == "weapon walk").state;
         AnimatorState runningState = states.FirstOrDefault(state => state.state.name == "Running").state;
         AnimatorState jumpState = states.FirstOrDefault(state => state.state.name == "jump").state;
 
@@ -56,6 +60,12 @@ public static class ConfigureDuckAnimator
         if (walkingState == null)
         {
             walkingState = controller.layers[0].stateMachine.AddState("Walking", new Vector3(380f, 110f, 0f));
+            changed = true;
+        }
+
+        if (weaponWalkingState == null)
+        {
+            weaponWalkingState = controller.layers[0].stateMachine.AddState("weapon walk", new Vector3(800f, 50f, 0f));
             changed = true;
         }
 
@@ -73,6 +83,7 @@ public static class ConfigureDuckAnimator
 
         changed |= AssignState(idleState, idleClip, 1f);
         changed |= AssignState(walkingState, walkingClip, 1f);
+        changed |= AssignState(weaponWalkingState, weaponWalkingClip, 1f);
         changed |= AssignState(runningState, runningClip, 1f);
         changed |= AssignState(jumpState, jumpClip, 1f);
 

@@ -11,10 +11,15 @@ public class DuckMover : MonoBehaviour
     [SerializeField] private string walkingStateName = "Walking";
     [SerializeField] private string runningStateName = "Running";
     [SerializeField] private string jumpStateName = "jump";
+    [SerializeField] private string pickupWeaponName = "weapon1";
+    [SerializeField] private float weaponPickupDistance = 1.25f;
+    [SerializeField] private Vector3 heldWeaponLocalPosition = new Vector3(0.08f, 0.03f, 0.02f);
+    [SerializeField] private Vector3 heldWeaponLocalScale = Vector3.one;
 
     private const string SpeedParameterName = "Speed";
     private const string GroundedParameterName = "Grounded";
     private const string JumpParameterName = "Jump";
+    private static readonly Vector3 HeldWeaponLocalEulerAngles = new Vector3(-90f, 180f, -90f);
 
     private Camera mainCamera;
     private Animator animator;
@@ -32,7 +37,14 @@ public class DuckMover : MonoBehaviour
     private bool jumpQueued;
     private bool wantsToRun;
     private bool hasMoveInput;
+    private bool hasWeapon;
     private Vector3 desiredMoveDirection;
+    private Transform pickupWeapon;
+    private Transform heldWeapon;
+    private Transform rightHand;
+    private Vector3 heldWeaponWorldScale = Vector3.one;
+    private Collider[] pickupWeaponColliders = System.Array.Empty<Collider>();
+    private Rigidbody pickupWeaponBody;
 
     private void Awake()
     {
@@ -70,8 +82,21 @@ public class DuckMover : MonoBehaviour
             SetJumpTrigger();
         }
 
+        if (keyboard.eKey.wasPressedThisFrame)
+        {
+            TryPickupWeapon();
+        }
+
         SyncAnimatorParameters();
         PlayState(GetAnimationState());
+    }
+
+    private void LateUpdate()
+    {
+        if (hasWeapon)
+        {
+            KeepWeaponInRightHand();
+        }
     }
 
     private void FixedUpdate()
@@ -274,6 +299,178 @@ public class DuckMover : MonoBehaviour
     private bool HasState(int stateHash)
     {
         return animator != null && animator.HasState(0, stateHash);
+    }
+
+    private void TryPickupWeapon()
+    {
+        if (hasWeapon)
+        {
+            return;
+        }
+
+        Transform weapon = GetPickupWeapon();
+        if (weapon == null || IsHeldByAnotherDuck(weapon) || !IsWeaponCloseEnough(weapon))
+        {
+            return;
+        }
+
+        rightHand = GetRightHand();
+        if (rightHand == null)
+        {
+            return;
+        }
+
+        pickupWeaponBody = weapon.GetComponent<Rigidbody>();
+        if (pickupWeaponBody != null)
+        {
+            pickupWeaponBody.isKinematic = true;
+            pickupWeaponBody.detectCollisions = false;
+        }
+
+        pickupWeaponColliders = weapon.GetComponentsInChildren<Collider>();
+        foreach (Collider weaponCollider in pickupWeaponColliders)
+        {
+            weaponCollider.enabled = false;
+        }
+
+        heldWeapon = weapon;
+        heldWeaponWorldScale = Vector3.Scale(weapon.lossyScale, heldWeaponLocalScale);
+        hasWeapon = true;
+        wantsToRun = false;
+        SetWeaponVisible(heldWeapon, true);
+        KeepWeaponInRightHand();
+        PlayState(GetAnimationState());
+    }
+
+    private Transform GetRightHand()
+    {
+        if (rightHand != null)
+        {
+            return rightHand;
+        }
+
+        rightHand = animator != null ? animator.GetBoneTransform(HumanBodyBones.RightHand) : null;
+        return rightHand;
+    }
+
+    private void KeepWeaponInRightHand()
+    {
+        if (heldWeapon == null)
+        {
+            return;
+        }
+
+        Transform hand = GetRightHand();
+        if (hand == null)
+        {
+            return;
+        }
+
+        if (heldWeapon.parent != hand)
+        {
+            heldWeapon.SetParent(hand, false);
+        }
+
+        heldWeapon.localPosition = heldWeaponLocalPosition;
+        heldWeapon.localRotation = Quaternion.Euler(HeldWeaponLocalEulerAngles);
+        SetWorldScale(heldWeapon, heldWeaponWorldScale);
+    }
+
+    private static void SetWeaponVisible(Transform weapon, bool isVisible)
+    {
+        if (weapon == null)
+        {
+            return;
+        }
+
+        weapon.gameObject.SetActive(isVisible);
+        foreach (Renderer weaponRenderer in weapon.GetComponentsInChildren<Renderer>(true))
+        {
+            weaponRenderer.enabled = isVisible;
+        }
+    }
+
+    private Transform GetPickupWeapon()
+    {
+        if (pickupWeapon != null)
+        {
+            return pickupWeapon;
+        }
+
+        GameObject weaponObject = GameObject.Find(pickupWeaponName);
+        pickupWeapon = weaponObject != null ? weaponObject.transform : null;
+        return pickupWeapon;
+    }
+
+    private bool IsWeaponCloseEnough(Transform weapon)
+    {
+        Collider closestCollider = GetClosestWeaponCollider(weapon);
+        if (closestCollider == null)
+        {
+            return Vector3.Distance(transform.position, weapon.position) <= weaponPickupDistance;
+        }
+
+        Vector3 closestPoint = GetClosestPoint(closestCollider);
+        return Vector3.Distance(transform.position, closestPoint) <= weaponPickupDistance;
+    }
+
+    private Collider GetClosestWeaponCollider(Transform weapon)
+    {
+        Collider[] weaponColliders = weapon.GetComponentsInChildren<Collider>();
+        Collider closestCollider = null;
+        float closestDistance = float.PositiveInfinity;
+
+        foreach (Collider weaponCollider in weaponColliders)
+        {
+            if (!weaponCollider.enabled)
+            {
+                continue;
+            }
+
+            Vector3 closestPoint = GetClosestPoint(weaponCollider);
+            float distance = (transform.position - closestPoint).sqrMagnitude;
+            if (distance >= closestDistance)
+            {
+                continue;
+            }
+
+            closestDistance = distance;
+            closestCollider = weaponCollider;
+        }
+
+        return closestCollider;
+    }
+
+    private Vector3 GetClosestPoint(Collider weaponCollider)
+    {
+        return weaponCollider.bounds.ClosestPoint(transform.position);
+    }
+
+    private static void SetWorldScale(Transform target, Vector3 worldScale)
+    {
+        Transform parent = target.parent;
+        if (parent == null)
+        {
+            target.localScale = worldScale;
+            return;
+        }
+
+        Vector3 parentScale = parent.lossyScale;
+        target.localScale = new Vector3(
+            SafeDivide(worldScale.x, parentScale.x),
+            SafeDivide(worldScale.y, parentScale.y),
+            SafeDivide(worldScale.z, parentScale.z));
+    }
+
+    private static float SafeDivide(float value, float divisor)
+    {
+        return Mathf.Approximately(divisor, 0f) ? value : value / divisor;
+    }
+
+    private bool IsHeldByAnotherDuck(Transform weapon)
+    {
+        DuckMover holder = weapon.GetComponentInParent<DuckMover>();
+        return holder != null && holder != this;
     }
 
     private void SyncAnimatorParameters()

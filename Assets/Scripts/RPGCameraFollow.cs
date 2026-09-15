@@ -6,34 +6,73 @@ public sealed class RPGCameraFollow : MonoBehaviour
 {
     private const int MaxCollisionHits = 32;
 
+    [Header("Target")]
+    [Tooltip("The characters this camera follows.")]
     [SerializeField] private Transform[] targets;
+    [Tooltip("If no target is assigned, automatically follow every DuckMover in the scene.")]
     [SerializeField] private bool autoFindDuckMovers = true;
-    [SerializeField] private Vector3 focusOffset = new Vector3(0f, 1.2f, 0f);
-    [SerializeField] private float followDistance = 8f;
-    [SerializeField] private float followHeight = 7f;
-    [SerializeField] private float yawAngle = 45f;
-    [SerializeField] private float groupPadding = 1.5f;
-    [SerializeField] private float maxGroupZoomOut = 4f;
-    [SerializeField] private float positionSmoothTime = 0.15f;
-    [SerializeField] private float rotationSharpness = 12f;
-    [SerializeField] private float fieldOfView = 45f;
+    [Tooltip("Where the camera looks, relative to the followed character.")]
+    [SerializeField] private Vector3 focusOffset = new Vector3(0f, 1.35f, 0f);
+
+    [Header("View Feel")]
+    [Tooltip("Default distance behind the character.")]
+    [Range(3f, 10f)]
+    [SerializeField] private float followDistance = 5.5f;
+    [Tooltip("Default camera height. Lower feels more natural; higher feels more tactical.")]
+    [Range(2f, 6f)]
+    [SerializeField] private float followHeight = 3.2f;
+    [Tooltip("Starting orbit angle around the target.")]
+    [Range(-180f, 180f)]
+    [SerializeField] private float yawAngle = 0f;
+    [Tooltip("Extra space when following a group.")]
+    [Range(0f, 3f)]
+    [SerializeField] private float groupPadding = 1.2f;
+    [Tooltip("Maximum group zoom-out distance.")]
+    [Range(0f, 5f)]
+    [SerializeField] private float maxGroupZoomOut = 2.5f;
+    [Tooltip("Higher is softer. Around 0.2 feels natural for character following.")]
+    [Range(0.05f, 0.6f)]
+    [SerializeField] private float positionSmoothTime = 0.22f;
+    [Tooltip("Higher snaps the camera direction faster.")]
+    [Range(3f, 15f)]
+    [SerializeField] private float rotationSharpness = 7f;
+    [Tooltip("A wider field of view reduces the zoomed-in, dizzy feeling.")]
+    [Range(40f, 65f)]
+    [SerializeField] private float fieldOfView = 52f;
+
+    [Header("Player Controls")]
     [SerializeField] private bool cameraControlsEnabled = true;
     [SerializeField] private bool rotateWithRightMouse = true;
-    [SerializeField] private bool rotateWithKeyboard = true;
+    [Tooltip("Off by default because E is used for pickup.")]
+    [SerializeField] private bool rotateWithKeyboard = false;
     [SerializeField] private bool zoomWithMouseWheel = true;
-    [SerializeField] private float mouseYawSensitivity = 0.15f;
-    [SerializeField] private float mouseHeightSensitivity = 0.035f;
-    [SerializeField] private float keyboardYawSpeed = 120f;
-    [SerializeField] private float zoomSpeed = 2f;
-    [SerializeField] private float minFollowDistance = 3f;
-    [SerializeField] private float maxFollowDistance = 12f;
-    [SerializeField] private float minFollowHeight = 2f;
-    [SerializeField] private float maxFollowHeight = 8f;
+    [Range(0.02f, 0.2f)]
+    [SerializeField] private float mouseYawSensitivity = 0.08f;
+    [Range(0.005f, 0.05f)]
+    [SerializeField] private float mouseHeightSensitivity = 0.018f;
+    [Range(30f, 180f)]
+    [SerializeField] private float keyboardYawSpeed = 75f;
+    [Range(0.5f, 4f)]
+    [SerializeField] private float zoomSpeed = 1.25f;
+    [Range(2f, 8f)]
+    [SerializeField] private float minFollowDistance = 4f;
+    [Range(5f, 14f)]
+    [SerializeField] private float maxFollowDistance = 8.5f;
+    [Range(1.5f, 5f)]
+    [SerializeField] private float minFollowHeight = 2.2f;
+    [Range(3f, 8f)]
+    [SerializeField] private float maxFollowHeight = 4.8f;
+
+    [Header("Visibility")]
+    [Tooltip("Fade objects between the camera and the character.")]
     [SerializeField] private bool fadeBlockingObjects = true;
     [SerializeField] private LayerMask blockingObjectLayers = ~0;
-    [SerializeField] private float visibilityCheckRadius = 0.45f;
-    [SerializeField] private float blockingObjectAlpha = 0.25f;
-    [SerializeField] private float blockingObjectFadeSpeed = 6f;
+    [Range(0.1f, 0.8f)]
+    [SerializeField] private float visibilityCheckRadius = 0.3f;
+    [Range(0.15f, 0.75f)]
+    [SerializeField] private float blockingObjectAlpha = 0.4f;
+    [Range(2f, 12f)]
+    [SerializeField] private float blockingObjectFadeSpeed = 8f;
 
     private Camera attachedCamera;
     private Vector3 currentVelocity;
