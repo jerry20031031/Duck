@@ -1,0 +1,1 @@
+BLENDER_OK 5.2.1 LTS

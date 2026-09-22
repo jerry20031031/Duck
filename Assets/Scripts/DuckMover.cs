@@ -3,9 +3,9 @@ using UnityEngine.InputSystem;
 
 public class DuckMover : MonoBehaviour
 {
-    [SerializeField] private float walkSpeed = 1.5f;
-    [SerializeField] private float runSpeed = 3f;
-    [SerializeField] private float jumpSpeed = 5.5f;
+    [SerializeField] private float walkSpeed = 5f;
+    [SerializeField] private float runSpeed = 10f;
+    [SerializeField] private float jumpSpeed = 10f;
     [SerializeField] private bool cameraRelativeMovement = true;
     [SerializeField] private string idleStateName = "idle";
     [SerializeField] private string walkingStateName = "Walking";
@@ -50,6 +50,10 @@ public class DuckMover : MonoBehaviour
     {
         mainCamera = Camera.main;
         animator = GetComponent<Animator>();
+        if (animator == null)
+        {
+            animator = GetComponentInChildren<Animator>();
+        }
         body = GetComponent<Rigidbody>();
 
         ConfigurePhysics();

@@ -1,0 +1,47 @@
+Dominant vertex groups by vertex:
+  Head: 28311
+  Hips: 9926
+  RightUpLeg: 7737
+  LeftUpLeg: 6978
+  RightArm: 3163
+  LeftArm: 3061
+  RightShoulder: 2807
+  LeftShoulder: 2666
+  RightHand: 1353
+  LeftHand: 1347
+  LeftLeg: 1322
+  RightLeg: 1306
+  RightToeBase: 1258
+  LeftFoot: 1257
+  RightFoot: 1179
+  LeftToeBase: 1167
+  LeftForeArm: 447
+  RightForeArm: 440
+  Spine01: 407
+  Spine: 51
+  neck: 18
+  Spine02: 5
+
+Dominant vertex groups by polygon:
+  Head: 56622
+  Hips: 19856
+  RightUpLeg: 15478
+  LeftUpLeg: 13958
+  RightArm: 6322
+  LeftArm: 6123
+  RightShoulder: 5613
+  LeftShoulder: 5334
+  RightHand: 2704
+  LeftHand: 2692
+  LeftLeg: 2644
+  RightLeg: 2612
+  RightToeBase: 2514
+  LeftFoot: 2514
+  RightFoot: 2358
+  LeftToeBase: 2332
+  LeftForeArm: 894
+  RightForeArm: 880
+  Spine01: 813
+  Spine: 102
+  neck: 34
+  Spine02: 8

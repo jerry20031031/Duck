@@ -1,0 +1,11 @@
+Imported: D:\DuckDuckDuck\Duck\Assets\people\1\SeparatedMaterials\Duck1_SeparatedMaterials.fbx
+Object: Armature type=ARMATURE
+Object: char1 type=MESH
+  Mesh: char1
+  Vertices: 76206
+  Polygons: 152407
+  Materials: 3
+    [0] Body_Recolor: 138159 polygons
+    [1] Beak: 4530 polygons
+    [2] Feet: 9718 polygons
+  UV layers: 1
