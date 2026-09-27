@@ -7,9 +7,10 @@ public sealed class CharacterSelectionController : MonoBehaviour
 {
     private const string SelectedCharacterIndexKey = "SelectedCharacterIndex";
     private const string SelectedCharacterNameKey = "SelectedCharacterName";
-    private const float DefaultColliderRadius = 0.45f;
-    private const float DefaultColliderHeight = 2.1f;
-    private static readonly Vector3 DefaultColliderCenter = new Vector3(0f, 1.05f, 0f);
+    private const string PlayerNameKey = "PlayerName";
+    private const float DefaultColliderRadius = 0.58f;
+    private const float DefaultColliderHeight = 3.077536f;
+    private static readonly Vector3 DefaultColliderCenter = new Vector3(0f, 1.785727f, 0f);
 
     [System.Serializable]
     public sealed class CharacterPage
@@ -91,8 +92,41 @@ public sealed class CharacterSelectionController : MonoBehaviour
         PlayerPrefs.Save();
 
         SetText(selectedText, "已選擇：" + page.displayName);
-        EnterLobbyWithSelectedCharacter(page);
+
+        FusionSessionLauncher multiplayerLauncher = FindFirstObjectByType<FusionSessionLauncher>();
+        if (multiplayerLauncher != null && multiplayerLauncher.isActiveAndEnabled)
+        {
+            multiplayerLauncher.ShowConnectionPanel();
+            return;
+        }
+
+        EnterLobbyWithSelectedCharacter(page, GetSavedPlayerName());
         Debug.Log("Selected character: " + page.displayName);
+    }
+
+    public void StartSinglePlayerWithCurrentSelection(string playerName)
+    {
+        if (pages == null || pages.Length == 0 || !IsCurrentPageSelectable())
+        {
+            return;
+        }
+
+        EnterLobbyWithSelectedCharacter(pages[currentIndex], playerName);
+    }
+
+    public void HideSelectionForMultiplayer()
+    {
+        if (selectionPanel != null)
+        {
+            selectionPanel.SetActive(false);
+        }
+
+        if (previewRoot != null)
+        {
+            previewRoot.SetActive(false);
+        }
+
+        HideSelectionCanvas();
     }
 
     private void WireButtons()
@@ -164,7 +198,7 @@ public sealed class CharacterSelectionController : MonoBehaviour
         }
     }
 
-    private void EnterLobbyWithSelectedCharacter(CharacterPage page)
+    private void EnterLobbyWithSelectedCharacter(CharacterPage page, string playerName)
     {
         GameObject selectedModel = page.model;
         if (selectedModel == null)
@@ -196,7 +230,15 @@ public sealed class CharacterSelectionController : MonoBehaviour
         ConfigureAnimator(selectedModel, page.animatorController);
         ConfigurePlayerPhysics(selectedModel);
         EnableDuckMover(selectedModel);
+        ConfigureSinglePlayerAppearance(selectedModel, playerName);
         HideSelectionCanvas();
+    }
+
+    private static void ConfigureSinglePlayerAppearance(GameObject player, string playerName)
+    {
+        DuckSinglePlayerAppearance appearance = player.GetComponent<DuckSinglePlayerAppearance>();
+        appearance ??= player.AddComponent<DuckSinglePlayerAppearance>();
+        appearance.Configure(playerName, 1);
     }
 
     private static void ConfigureAnimator(GameObject player, RuntimeAnimatorController controller)
@@ -236,13 +278,9 @@ public sealed class CharacterSelectionController : MonoBehaviour
         if (capsule == null)
         {
             capsule = player.AddComponent<CapsuleCollider>();
-            ConfigureDefaultCollider(capsule);
         }
-        else
-        {
-            capsule.enabled = true;
-            capsule.isTrigger = false;
-        }
+
+        ConfigureDefaultCollider(capsule);
 
         Rigidbody body = player.GetComponent<Rigidbody>();
         if (body == null)
@@ -311,5 +349,11 @@ public sealed class CharacterSelectionController : MonoBehaviour
         {
             text.text = value;
         }
+    }
+
+    private static string GetSavedPlayerName()
+    {
+        string playerName = PlayerPrefs.GetString(PlayerNameKey, "小鴨").Trim();
+        return string.IsNullOrWhiteSpace(playerName) ? "小鴨" : playerName;
     }
 }

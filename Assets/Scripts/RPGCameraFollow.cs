@@ -91,6 +91,14 @@ public sealed class RPGCameraFollow : MonoBehaviour
         SnapToRPGView();
     }
 
+    public void SetTarget(Transform target)
+    {
+        targets = target == null ? System.Array.Empty<Transform>() : new[] { target };
+        autoFindDuckMovers = false;
+        currentVelocity = Vector3.zero;
+        SnapToRPGView();
+    }
+
     private void LateUpdate()
     {
         RefreshTargetsIfNeeded();
@@ -136,8 +144,12 @@ public sealed class RPGCameraFollow : MonoBehaviour
         if (rotateWithRightMouse && mouse != null && mouse.rightButton.isPressed)
         {
             Vector2 mouseDelta = mouse.delta.ReadValue();
-            yawAngle += mouseDelta.x * mouseYawSensitivity;
-            followHeight = Mathf.Clamp(followHeight - mouseDelta.y * mouseHeightSensitivity, minFollowHeight, maxFollowHeight);
+            float sensitivity = GameSettings.MouseSensitivity;
+            yawAngle += mouseDelta.x * mouseYawSensitivity * sensitivity;
+            followHeight = Mathf.Clamp(
+                followHeight - mouseDelta.y * mouseHeightSensitivity * sensitivity,
+                minFollowHeight,
+                maxFollowHeight);
             heightDistanceRatio = followHeight / Mathf.Max(followDistance, 0.001f);
         }
 

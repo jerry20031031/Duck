@@ -46,18 +46,25 @@ public class DuckMover : MonoBehaviour
     private Collider[] pickupWeaponColliders = System.Array.Empty<Collider>();
     private Rigidbody pickupWeaponBody;
 
+    public float NetworkAnimationSpeed => GetAnimatorSpeed();
+    public bool NetworkAnimationGrounded => isGrounded;
+    public int NetworkAnimationStateHash => GetAnimationState();
+
     private void Awake()
     {
+        RefreshCharacterReferences();
+    }
+
+    public void RefreshCharacterReferences()
+    {
         mainCamera = Camera.main;
-        animator = GetComponent<Animator>();
-        if (animator == null)
-        {
-            animator = GetComponentInChildren<Animator>();
-        }
+        animator = GetComponentInChildren<Animator>();
+        animator ??= GetComponentInChildren<Animator>(true);
         body = GetComponent<Rigidbody>();
 
         ConfigurePhysics();
         CacheAnimatorStates();
+        currentStateHash = 0;
 
         if (animator != null)
         {

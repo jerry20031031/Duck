@@ -785,6 +785,8 @@ MonoBehaviour:
   m_Name: 
   m_EditorClassIdentifier: 
   gameSceneName: BigHall
+  backgroundMusic: {fileID: 8300000, guid: 5278e33dc21d4534ba99681837228f51, type: 3}
+  backgroundMusicVolume: 0.45
 --- !u!4 &1078837497
 Transform:
   m_ObjectHideFlags: 0
