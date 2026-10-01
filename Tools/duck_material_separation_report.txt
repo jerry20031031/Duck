@@ -1,0 +1,7 @@
+Source: D:\DuckDuckDuck\Duck\Assets\people\1\Meshy_AI_11_biped_Animation_Walking_withSkin.fbx
+Output: D:\DuckDuckDuck\Duck\Assets\people\1\SeparatedMaterials\Duck1_SeparatedMaterials.fbx
+Beak projection threshold: -106.57790
+Polygon material assignment:
+  Body: 138159
+  Beak: 4530
+  Feet: 9718

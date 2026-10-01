@@ -1,0 +1,9 @@
+Imported: D:\DuckDuckDuck\Duck\Assets\people\1\Meshy_AI_11_biped_Animation_Walking_withSkin.fbx
+Object: Armature type=ARMATURE
+Object: char1 type=MESH
+  Mesh: char1
+  Vertices: 76206
+  Polygons: 152407
+  Materials: 1
+    [0] Material_1: 152407 polygons
+  UV layers: 1
