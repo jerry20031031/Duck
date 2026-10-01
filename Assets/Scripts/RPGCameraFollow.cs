@@ -6,6 +6,15 @@ public sealed class RPGCameraFollow : MonoBehaviour
 {
     private const int MaxCollisionHits = 32;
 
+    /// <summary>The player-controlled parts of a follow-camera view.</summary>
+    public struct ViewState
+    {
+        public float yawAngle;
+        public float followDistance;
+        public float followHeight;
+        public float fieldOfView;
+    }
+
     [Header("Target")]
     [Tooltip("The characters this camera follows.")]
     [SerializeField] private Transform[] targets;
@@ -97,6 +106,79 @@ public sealed class RPGCameraFollow : MonoBehaviour
         autoFindDuckMovers = false;
         currentVelocity = Vector3.zero;
         SnapToRPGView();
+    }
+
+    /// <summary>Captures the orbit settings so a scene change keeps the same view.</summary>
+    public ViewState CaptureViewState()
+    {
+        return new ViewState
+        {
+            yawAngle = yawAngle,
+            followDistance = followDistance,
+            followHeight = followHeight,
+            fieldOfView = fieldOfView
+        };
+    }
+
+    /// <summary>Restores a player-controlled orbit view before assigning its new target.</summary>
+    public void RestoreViewState(ViewState state)
+    {
+        yawAngle = state.yawAngle;
+        followDistance = Mathf.Clamp(state.followDistance, minFollowDistance, maxFollowDistance);
+        followHeight = Mathf.Clamp(state.followHeight, minFollowHeight, maxFollowHeight);
+        fieldOfView = Mathf.Clamp(state.fieldOfView, 30f, 70f);
+        heightDistanceRatio = followHeight / Mathf.Max(followDistance, 0.001f);
+        currentVelocity = Vector3.zero;
+        ApplyCameraSettings();
+    }
+
+    /// <summary>
+    /// Returns the current main follow camera, or activates a scene camera if
+    /// this level has its cameras disabled in the saved scene.
+    /// </summary>
+    public static RPGCameraFollow GetOrActivateMainCamera()
+    {
+        Camera main = Camera.main;
+        RPGCameraFollow activeFollow = main != null ? main.GetComponent<RPGCameraFollow>() : null;
+        if (activeFollow != null)
+        {
+            return activeFollow;
+        }
+
+        RPGCameraFollow[] follows = FindObjectsByType<RPGCameraFollow>(
+            FindObjectsInactive.Include,
+            FindObjectsSortMode.None);
+        for (int i = 0; i < follows.Length; i++)
+        {
+            RPGCameraFollow candidate = follows[i];
+            if (candidate == null)
+            {
+                continue;
+            }
+
+            Camera candidateCamera = candidate.GetComponent<Camera>();
+            if (candidateCamera == null)
+            {
+                continue;
+            }
+
+            candidate.gameObject.SetActive(true);
+            candidateCamera.enabled = true;
+            candidate.gameObject.tag = "MainCamera";
+            return candidate;
+        }
+
+        // UNIT1 has no authored Camera in its scene file.  A network scene
+        // switch unloads BigHall's camera, so create a replacement instead of
+        // leaving the Game view at "No cameras rendering".
+        GameObject cameraObject = new GameObject("Runtime Follow Camera");
+        cameraObject.tag = "MainCamera";
+        Camera createdCamera = cameraObject.AddComponent<Camera>();
+        createdCamera.clearFlags = CameraClearFlags.Skybox;
+        createdCamera.nearClipPlane = 0.1f;
+        createdCamera.farClipPlane = 500f;
+        cameraObject.AddComponent<AudioListener>();
+        return cameraObject.AddComponent<RPGCameraFollow>();
     }
 
     private void LateUpdate()

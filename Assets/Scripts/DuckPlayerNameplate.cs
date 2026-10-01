@@ -87,9 +87,11 @@ public sealed class DuckPlayerNameplate : MonoBehaviour
 
     private void StyleLabel()
     {
-        if (label.font == null && TMP_Settings.defaultFontAsset != null)
+        TMP_FontAsset uiFont = TMP_Settings.defaultFontAsset;
+        if (uiFont != null && label.font != uiFont)
         {
-            label.font = TMP_Settings.defaultFontAsset;
+            label.font = uiFont;
+            label.fontSharedMaterial = uiFont.material;
         }
 
         if (label.font != null && label.fontSharedMaterial == null)

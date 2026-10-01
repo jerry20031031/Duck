@@ -11,10 +11,15 @@ public class DuckMover : MonoBehaviour
     [SerializeField] private string walkingStateName = "Walking";
     [SerializeField] private string runningStateName = "Running";
     [SerializeField] private string jumpStateName = "jump";
+    [SerializeField] private string wandAttackStateName = "stand attack";
+    [SerializeField, Min(0.05f)] private float wandAttackAnimationDuration = DuckWandAttack.MinimumWandAttackWindup;
     [SerializeField] private string pickupWeaponName = "weapon1";
     [SerializeField] private float weaponPickupDistance = 1.25f;
     [SerializeField] private Vector3 heldWeaponLocalPosition = new Vector3(0.08f, 0.03f, 0.02f);
     [SerializeField] private Vector3 heldWeaponLocalScale = Vector3.one;
+    [SerializeField, Min(0f)] private float groundProbeDistance = 0.12f;
+    [SerializeField, Min(0f)] private float gravityAcceleration = 24f;
+    [SerializeField, Min(0f)] private float groundedStickSpeed = 1f;
 
     private const string SpeedParameterName = "Speed";
     private const string GroundedParameterName = "Grounded";
@@ -24,20 +29,24 @@ public class DuckMover : MonoBehaviour
     private Camera mainCamera;
     private Animator animator;
     private Rigidbody body;
+    private CapsuleCollider capsule;
     private int idleStateHash;
     private int walkingStateHash;
     private int runningStateHash;
     private int jumpStateHash;
+    private int wandAttackStateHash;
     private int speedParameterHash;
     private int groundedParameterHash;
     private int jumpParameterHash;
     private int currentStateHash;
 
-    private bool isGrounded = true;
+    private readonly RaycastHit[] groundHits = new RaycastHit[8];
+    private bool isGrounded;
     private bool jumpQueued;
     private bool wantsToRun;
     private bool hasMoveInput;
     private bool hasWeapon;
+    private float verticalSpeed;
     private Vector3 desiredMoveDirection;
     private Transform pickupWeapon;
     private Transform heldWeapon;
@@ -45,10 +54,17 @@ public class DuckMover : MonoBehaviour
     private Vector3 heldWeaponWorldScale = Vector3.one;
     private Collider[] pickupWeaponColliders = System.Array.Empty<Collider>();
     private Rigidbody pickupWeaponBody;
+    private Unit1WandPickup networkWand;
+    private float wandAttackUntil;
 
     public float NetworkAnimationSpeed => GetAnimatorSpeed();
     public bool NetworkAnimationGrounded => isGrounded;
     public int NetworkAnimationStateHash => GetAnimationState();
+    /// <summary>True after this duck has picked up a wand.</summary>
+    public bool HasWeapon => hasWeapon;
+    /// <summary>The synchronized UNIT1 wand in this duck's hand, if any.</summary>
+    public Unit1WandPickup HeldNetworkWand => networkWand;
+    public bool IsPlayingWandAttack => Time.time < wandAttackUntil;
 
     private void Awake()
     {
@@ -61,6 +77,7 @@ public class DuckMover : MonoBehaviour
         animator = GetComponentInChildren<Animator>();
         animator ??= GetComponentInChildren<Animator>(true);
         body = GetComponent<Rigidbody>();
+        capsule = GetComponent<CapsuleCollider>();
 
         ConfigurePhysics();
         CacheAnimatorStates();
@@ -82,24 +99,18 @@ public class DuckMover : MonoBehaviour
             return;
         }
 
-        Vector2 input = ReadMoveInput(keyboard);
-        hasMoveInput = input.sqrMagnitude > 0.001f;
-        wantsToRun = keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed;
-        desiredMoveDirection = hasMoveInput ? GetMoveDirection(input.normalized) : Vector3.zero;
-
-        if (keyboard.spaceKey.wasPressedThisFrame && isGrounded)
+        // Keep a one-frame jump press until Fusion's next simulation tick.
+        // Continuous keyboard movement is intentionally read in
+        // SimulateNetworkMovement(), where the networked Rigidbody is written.
+        if (keyboard.spaceKey.wasPressedThisFrame)
         {
             jumpQueued = true;
-            SetJumpTrigger();
         }
 
         if (keyboard.eKey.wasPressedThisFrame)
         {
             TryPickupWeapon();
         }
-
-        SyncAnimatorParameters();
-        PlayState(GetAnimationState());
     }
 
     private void LateUpdate()
@@ -110,53 +121,123 @@ public class DuckMover : MonoBehaviour
         }
     }
 
-    private void FixedUpdate()
+    /// <summary>
+    /// Advances this duck from FusionDuckPlayer.FixedUpdateNetwork. It is a
+    /// collision-aware kinematic motor: NetworkTransform publishes the direct
+    /// position change, rather than relying on Unity to integrate velocity after
+    /// Fusion has captured its network state.
+    /// </summary>
+    public void SimulateNetworkMovement(float tickDeltaTime)
     {
         if (body == null)
         {
             return;
         }
 
+        Keyboard keyboard = Keyboard.current;
+        Vector2 input = keyboard != null ? ReadMoveInput(keyboard) : Vector2.zero;
+        hasMoveInput = input.sqrMagnitude > 0.001f;
+        wantsToRun = keyboard != null && (keyboard.leftShiftKey.isPressed || keyboard.rightShiftKey.isPressed);
+        desiredMoveDirection = hasMoveInput ? GetMoveDirection(input.normalized) : Vector3.zero;
+
+        // The new clip is deliberately a standing cast. Keep its silhouette
+        // readable by pausing movement for the brief animation window.
+        if (IsPlayingWandAttack)
+        {
+            hasMoveInput = false;
+            wantsToRun = false;
+            desiredMoveDirection = Vector3.zero;
+        }
+
+        UpdateGroundedState();
+
         float speed = wantsToRun && HasState(runningStateHash) ? runSpeed : walkSpeed;
-        Vector3 horizontalVelocity = desiredMoveDirection * speed;
-        Vector3 velocity = body.linearVelocity;
-        velocity.x = horizontalVelocity.x;
-        velocity.z = horizontalVelocity.z;
+        DuckKinematicMotor.Move(body, desiredMoveDirection * speed * tickDeltaTime);
 
         if (jumpQueued && isGrounded)
         {
-            velocity.y = jumpSpeed;
+            verticalSpeed = jumpSpeed;
             isGrounded = false;
-            SyncAnimatorParameters();
+            SetJumpTrigger();
         }
 
         jumpQueued = false;
-        body.linearVelocity = velocity;
-        body.angularVelocity = Vector3.zero;
+        if (!isGrounded)
+        {
+            verticalSpeed -= gravityAcceleration * tickDeltaTime;
+        }
+        else if (verticalSpeed < 0f)
+        {
+            verticalSpeed = -groundedStickSpeed;
+        }
+
+        bool blockedVertically = DuckKinematicMotor.Move(body, Vector3.up * verticalSpeed * tickDeltaTime);
+        if (blockedVertically)
+        {
+            verticalSpeed = 0f;
+        }
+
+        // Player and AI ducks use a kinematic collision motor. Unity reports
+        // an error every tick if angularVelocity is assigned on such a body.
+        if (!body.isKinematic)
+        {
+            body.angularVelocity = Vector3.zero;
+        }
 
         if (hasMoveInput)
         {
             FaceDirection(desiredMoveDirection);
         }
+
+        UpdateGroundedState();
+        SyncAnimatorParameters();
+        PlayState(GetAnimationState());
     }
 
-    private void OnCollisionStay(Collision collision)
+    private void UpdateGroundedState()
     {
-        foreach (ContactPoint contact in collision.contacts)
+        bool wasGrounded = isGrounded;
+        isGrounded = IsGroundBelowFeet();
+        if (wasGrounded != isGrounded)
         {
-            if (Vector3.Dot(contact.normal, Vector3.up) > 0.55f)
-            {
-                isGrounded = true;
-                SyncAnimatorParameters();
-                return;
-            }
+            SyncAnimatorParameters();
         }
     }
 
-    private void OnCollisionExit(Collision collision)
+    private bool IsGroundBelowFeet()
     {
-        isGrounded = false;
-        SyncAnimatorParameters();
+        if (body == null || capsule == null || verticalSpeed > 0.05f)
+        {
+            return false;
+        }
+
+        float probeRadius = Mathf.Max(0.02f, capsule.radius * 0.9f);
+        float lowerSphereCenterY = capsule.center.y - (capsule.height * 0.5f - capsule.radius);
+        Vector3 origin = transform.TransformPoint(new Vector3(capsule.center.x, lowerSphereCenterY, capsule.center.z));
+        int hitCount = Physics.SphereCastNonAlloc(
+            origin,
+            probeRadius,
+            Vector3.down,
+            groundHits,
+            groundProbeDistance,
+            ~0,
+            QueryTriggerInteraction.Ignore);
+
+        for (int i = 0; i < hitCount; i++)
+        {
+            Collider hitCollider = groundHits[i].collider;
+            if (hitCollider == null || hitCollider == capsule || hitCollider.transform.IsChildOf(transform))
+            {
+                continue;
+            }
+
+            if (Vector3.Dot(groundHits[i].normal, Vector3.up) > 0.55f)
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 
     private void ConfigurePhysics()
@@ -166,11 +247,14 @@ public class DuckMover : MonoBehaviour
             return;
         }
 
-        body.useGravity = true;
-        body.isKinematic = false;
-        body.interpolation = RigidbodyInterpolation.Interpolate;
-        body.collisionDetectionMode = CollisionDetectionMode.ContinuousDynamic;
+        // Position is deliberately advanced by DuckKinematicMotor during a
+        // Fusion tick. Unity physics must not integrate a second motion path.
+        body.useGravity = false;
+        body.isKinematic = true;
+        body.interpolation = RigidbodyInterpolation.None;
+        body.collisionDetectionMode = CollisionDetectionMode.ContinuousSpeculative;
         body.constraints = RigidbodyConstraints.FreezeRotation;
+        body.linearVelocity = Vector3.zero;
     }
 
     private void CacheAnimatorStates()
@@ -179,6 +263,7 @@ public class DuckMover : MonoBehaviour
         walkingStateHash = Animator.StringToHash(walkingStateName);
         runningStateHash = Animator.StringToHash(runningStateName);
         jumpStateHash = Animator.StringToHash(jumpStateName);
+        wandAttackStateHash = Animator.StringToHash(wandAttackStateName);
         speedParameterHash = Animator.StringToHash(SpeedParameterName);
         groundedParameterHash = Animator.StringToHash(GroundedParameterName);
         jumpParameterHash = Animator.StringToHash(JumpParameterName);
@@ -186,6 +271,11 @@ public class DuckMover : MonoBehaviour
 
     private int GetAnimationState()
     {
+        if (IsPlayingWandAttack && HasState(wandAttackStateHash))
+        {
+            return wandAttackStateHash;
+        }
+
         if (!isGrounded && HasState(jumpStateHash))
         {
             return jumpStateHash;
@@ -244,13 +334,16 @@ public class DuckMover : MonoBehaviour
             return new Vector3(input.x, 0f, input.y);
         }
 
-        Vector3 forward = movementCamera.transform.forward;
-        Vector3 right = movementCamera.transform.right;
-        forward.y = 0f;
-        right.y = 0f;
+        Vector3 forward = Vector3.ProjectOnPlane(movementCamera.transform.forward, Vector3.up);
+        // A top-down camera has no horizontal forward vector.  In that case
+        // WASD must still work rather than turning W/S into a zero movement.
+        if (forward.sqrMagnitude < 0.001f)
+        {
+            forward = Vector3.forward;
+        }
 
         forward.Normalize();
-        right.Normalize();
+        Vector3 right = Vector3.Cross(Vector3.up, forward).normalized;
 
         return (forward * input.y + right * input.x).normalized;
     }
@@ -285,12 +378,34 @@ public class DuckMover : MonoBehaviour
 
         if (currentStateHash == stateHash)
         {
+            if (stateHash == wandAttackStateHash && IsPlayingWandAttack)
+            {
+                return;
+            }
+
             KeepLooping(stateHash);
             return;
         }
 
         currentStateHash = stateHash;
         animator.CrossFadeInFixedTime(stateHash, 0.08f);
+    }
+
+    /// <summary>Plays the controller's non-looping stand-attack state after a wand cast.</summary>
+    public float PlayWandAttackAnimation(float duration = -1f)
+    {
+        float clipWindow = duration > 0f
+            ? duration
+            : Mathf.Max(wandAttackAnimationDuration, DuckWandAttack.ResolveWandAttackDuration(animator));
+        if (!HasState(wandAttackStateHash))
+        {
+            return clipWindow;
+        }
+
+        wandAttackUntil = Mathf.Max(wandAttackUntil, Time.time + clipWindow);
+        currentStateHash = wandAttackStateHash;
+        animator.CrossFadeInFixedTime(wandAttackStateHash, 0.06f);
+        return clipWindow;
     }
 
     private void KeepLooping(int stateHash)
@@ -319,9 +434,17 @@ public class DuckMover : MonoBehaviour
             return;
         }
 
+        Unit1WandPickup networkPickup = GetClosestNetworkWand();
+        if (networkPickup != null)
+        {
+            networkPickup.RequestPickup();
+            return;
+        }
+
         Transform weapon = GetPickupWeapon();
         if (weapon == null || IsHeldByAnotherDuck(weapon) || !IsWeaponCloseEnough(weapon))
         {
+            pickupWeapon = null;
             return;
         }
 
@@ -347,10 +470,74 @@ public class DuckMover : MonoBehaviour
         heldWeapon = weapon;
         heldWeaponWorldScale = Vector3.Scale(weapon.lossyScale, heldWeaponLocalScale);
         hasWeapon = true;
+        FusionDuckPlayer networkPlayer = GetComponent<FusionDuckPlayer>();
+        networkPlayer?.SetHasWand(true);
         wantsToRun = false;
         SetWeaponVisible(heldWeapon, true);
         KeepWeaponInRightHand();
         PlayState(GetAnimationState());
+    }
+
+    /// <summary>
+    /// The replicated scene wand calls this on every client. Only the duck
+    /// holding the same networked wand may attack; replicas only receive the
+    /// visual state and never write Fusion state.
+    /// </summary>
+    public void SetNetworkWandHeld(Unit1WandPickup wand, bool held)
+    {
+        if (wand == null)
+        {
+            return;
+        }
+
+        if (held)
+        {
+            networkWand = wand;
+            hasWeapon = true;
+            GetComponent<FusionDuckPlayer>()?.SetHasWand(true);
+            return;
+        }
+
+        if (networkWand != wand)
+        {
+            return;
+        }
+
+        networkWand = null;
+        hasWeapon = heldWeapon != null;
+        GetComponent<FusionDuckPlayer>()?.SetHasWand(hasWeapon);
+    }
+
+    /// <summary>Used by the player health system when this duck is defeated.</summary>
+    public void ReleaseNetworkWand()
+    {
+        networkWand?.RequestRelease();
+    }
+
+    private Unit1WandPickup GetClosestNetworkWand()
+    {
+        Unit1WandPickup[] wands = FindObjectsByType<Unit1WandPickup>(
+            FindObjectsInactive.Exclude,
+            FindObjectsSortMode.None);
+        Unit1WandPickup closest = null;
+        float closestDistance = float.PositiveInfinity;
+        for (int i = 0; i < wands.Length; i++)
+        {
+            Unit1WandPickup candidate = wands[i];
+            if (candidate == null || !candidate.CanBePickedUpBy(transform.position))
+            {
+                continue;
+            }
+
+            float distance = (candidate.transform.position - transform.position).sqrMagnitude;
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                closest = candidate;
+            }
+        }
+
+        return closest;
     }
 
     private Transform GetRightHand()
@@ -408,9 +595,30 @@ public class DuckMover : MonoBehaviour
             return pickupWeapon;
         }
 
-        GameObject weaponObject = GameObject.Find(pickupWeaponName);
-        pickupWeapon = weaponObject != null ? weaponObject.transform : null;
+        GameObject[] objects = FindObjectsByType<GameObject>(FindObjectsInactive.Exclude, FindObjectsSortMode.None);
+        float closestDistance = float.PositiveInfinity;
+        for (int i = 0; i < objects.Length; i++)
+        {
+            GameObject candidate = objects[i];
+            if (candidate == null || !IsKnownWandName(candidate.name) || IsHeldByAnotherDuck(candidate.transform))
+            {
+                continue;
+            }
+
+            float distance = (candidate.transform.position - transform.position).sqrMagnitude;
+            if (distance < closestDistance)
+            {
+                closestDistance = distance;
+                pickupWeapon = candidate.transform;
+            }
+        }
+
         return pickupWeapon;
+    }
+
+    private bool IsKnownWandName(string objectName)
+    {
+        return objectName == pickupWeaponName || objectName == "blue" || objectName == "purplr" || objectName == "purple";
     }
 
     private bool IsWeaponCloseEnough(Transform weapon)

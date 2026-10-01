@@ -6,8 +6,9 @@ using UnityEngine.UI;
 [DisallowMultipleComponent]
 public sealed class FusionSessionLauncher : MonoBehaviour
 {
-    public const int CurrentSetupVersion = 11;
+    public const int CurrentSetupVersion = 20;
     private const string PlayerNameKey = "PlayerName";
+    private const string DefaultRoomName = "魔法大亂鬥房間";
     private const string DefaultPlayerName = "小鴨";
 
     [SerializeField] private CharacterSelectionController characterSelection;
@@ -19,11 +20,13 @@ public sealed class FusionSessionLauncher : MonoBehaviour
     [SerializeField] private Button singlePlayerButton;
     [SerializeField] private Button joinRoomButton;
     [SerializeField] private GameObject colorPlatform;
-    [SerializeField] private int maxPlayers = 8;
+    [SerializeField, Range(1, 6)] private int maxPlayers = 6;
     [SerializeField] private Vector3 spawnOrigin = new(15.08f, 1.4f, -2.02f);
     [SerializeField, HideInInspector] private int setupVersion;
 
     private NetworkRunner runner;
+    private FusionLobbyReadyController lobbyReadyController;
+    private FusionPlayerSceneTransfer playerSceneTransfer;
     private bool isConnecting;
 
     public int SetupVersion => setupVersion;
@@ -53,6 +56,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
 
     private void Awake()
     {
+        maxPlayers = Mathf.Clamp(maxPlayers, 1, 6);
         ResolveSceneReferences();
         WireButtons();
         if (connectionPanel != null)
@@ -159,6 +163,9 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         SetStatus("正在連線到 Photon…");
 
         GameObject runnerObject = new GameObject("Fusion Network Runner");
+        // The lobby scene is unloaded when the room starts. The multiplayer
+        // runner and its transfer callback must survive that scene change.
+        DontDestroyOnLoad(runnerObject);
         runner = runnerObject.AddComponent<NetworkRunner>();
         runner.ProvideInput = true;
         NetworkSceneManagerDefault sceneManager = runnerObject.AddComponent<NetworkSceneManagerDefault>();
@@ -167,7 +174,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         {
             GameMode = GameMode.Shared,
             SessionName = GetRoomName(),
-            PlayerCount = Mathf.Max(2, maxPlayers),
+            PlayerCount = maxPlayers,
             SceneManager = sceneManager
         });
 
@@ -182,6 +189,8 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         }
 
         SpawnLocalPlayer();
+        playerSceneTransfer = runnerObject.AddComponent<FusionPlayerSceneTransfer>();
+        playerSceneTransfer.Configure(runner, playerPrefab, SaveAndGetPlayerName());
         if (colorPlatform != null)
         {
             colorPlatform.SetActive(true);
@@ -192,6 +201,10 @@ public sealed class FusionSessionLauncher : MonoBehaviour
         {
             connectionPanel.SetActive(false);
         }
+
+        lobbyReadyController = runner.gameObject.GetComponent<FusionLobbyReadyController>();
+        lobbyReadyController ??= runner.gameObject.AddComponent<FusionLobbyReadyController>();
+        lobbyReadyController.Configure(runner);
     }
 
     private void SpawnLocalPlayer()
@@ -201,11 +214,11 @@ public sealed class FusionSessionLauncher : MonoBehaviour
             return;
         }
 
-        int slot = Mathf.Abs(runner.LocalPlayer.AsIndex) % 4;
+        int slot = Mathf.Abs(runner.LocalPlayer.AsIndex) % 6;
         Vector3 offset = new(
-            slot % 2 == 0 ? -1.5f : 1.5f,
+            (slot % 3 - 1) * 1.5f,
             0f,
-            slot / 2 == 0 ? -1.5f : 1.5f);
+            slot / 3 == 0 ? -1.5f : 1.5f);
         NetworkObject playerObject = runner.Spawn(
             playerPrefab,
             spawnOrigin + offset,
@@ -218,7 +231,7 @@ public sealed class FusionSessionLauncher : MonoBehaviour
     private string GetRoomName()
     {
         string roomName = roomNameInput != null ? roomNameInput.text.Trim() : string.Empty;
-        return string.IsNullOrWhiteSpace(roomName) ? "duck-room" : roomName;
+        return string.IsNullOrWhiteSpace(roomName) ? DefaultRoomName : roomName;
     }
 
     private string SaveAndGetPlayerName()

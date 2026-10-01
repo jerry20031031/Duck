@@ -15,21 +15,27 @@ public static class FusionMultiplayerPrototypeBuilder
     private const string YellowDuckPath = "Assets/people/1/00991177a1.fbx";
     private const string BlueDuckPath = "Assets/people/2/0917a2.fbx";
     private const string AnimatorControllerPath = "Assets/people/1/Meshy_AI_11_biped_Animation_Walking_withSkin.controller";
-    private const string NameplateFontPath = "Assets/UI/TmpFont/Fonts/NotoSansTC-Medium SDF.asset";
+    private const string NameplateFontPath = ChineseUiFontSetup.DynamicFontPath;
+    private const string ConnectionPanelTexturePath = "Assets/UI/ed270f38-b350-40a7-87f1-84d59310bf59.png";
+    private const string ConnectionButtonTexturePath = "Assets/UI/0484152f-c56c-4f00-b1cb-cc826bfc048f.png";
     private const string LauncherName = "Fusion Session Launcher";
     private const string PanelName = "Fusion Connection Panel";
     private const string ColorPlatformName = "Multiplayer Color Platform";
+    private const string ReadyBoardAnchorName = "Lobby Ready Board Anchor";
+    private const string ReadyBoardCanvasName = "Lobby Ready Board Canvas";
     private const string ColorPadMaterialFolder = "Assets/Materials/FusionColorPads";
     private const float PlayerHeight = 2.1f;
     private const float PlayerColliderHeight = 3.077536f;
     private const float PlayerColliderRadius = 0.58f;
     private const float PlayerColliderCenterY = 1.785727f;
     private static readonly Vector3 ColorPlatformPosition = new Vector3(15.08f, 1.2f, 4.5f);
+    private static readonly Vector3 ReadyBoardAnchorPosition = new Vector3(15.08f, 3.45f, 8.5f);
 
     static FusionMultiplayerPrototypeBuilder()
     {
         EditorApplication.update += TryAutoSetupOnEditorUpdate;
         EditorSceneManager.sceneOpened += OnSceneOpened;
+        EditorApplication.delayCall += EnsureReadyBoardCanvasInBigHall;
     }
 
     [MenuItem("Duck/Setup Fusion Multiplayer Prototype")]
@@ -106,6 +112,8 @@ public static class FusionMultiplayerPrototypeBuilder
         FusionSessionLauncher launcher = EnsureLauncher();
         ConnectionPanelRefs panel = BuildConnectionPanel(canvas.transform);
         GameObject colorPlatform = BuildColorPlatform();
+        BuildReadyBoardAnchor();
+        BuildReadyBoardCanvas();
         launcher.Configure(
             selection,
             playerPrefab,
@@ -124,16 +132,201 @@ public static class FusionMultiplayerPrototypeBuilder
         Debug.Log("Fusion Shared Mode prototype is ready.");
     }
 
+    private static void EnsureReadyBoardCanvasInBigHall()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode)
+        {
+            return;
+        }
+
+        Scene previousActiveScene = EditorSceneManager.GetActiveScene();
+        Scene scene = SceneManager.GetSceneByPath(BigHallScenePath);
+        bool wasLoaded = scene.IsValid() && scene.isLoaded;
+        if (!wasLoaded)
+        {
+            scene = EditorSceneManager.OpenScene(BigHallScenePath, OpenSceneMode.Additive);
+        }
+
+        EditorSceneManager.SetActiveScene(scene);
+        bool changed = BuildReadyBoardAnchor() | BuildReadyBoardCanvas();
+        if (changed)
+        {
+            EditorSceneManager.MarkSceneDirty(scene);
+            EditorSceneManager.SaveScene(scene);
+        }
+
+        if (!wasLoaded)
+        {
+            EditorSceneManager.CloseScene(scene, true);
+        }
+
+        if (previousActiveScene.IsValid() && previousActiveScene.isLoaded)
+        {
+            EditorSceneManager.SetActiveScene(previousActiveScene);
+        }
+    }
+
+    private static bool BuildReadyBoardAnchor()
+    {
+        GameObject anchor = FindLoadedSceneObject(ReadyBoardAnchorName);
+        if (anchor == null)
+        {
+            anchor = new GameObject(ReadyBoardAnchorName);
+            // First-time default. After this, designers may place the anchor
+            // on any wall without a future setup pass overwriting it.
+            anchor.transform.SetPositionAndRotation(ReadyBoardAnchorPosition, Quaternion.Euler(0f, 180f, 0f));
+            anchor.transform.localScale = Vector3.one;
+            EditorUtility.SetDirty(anchor);
+            return true;
+        }
+
+        return false;
+    }
+
+    private static bool BuildReadyBoardCanvas()
+    {
+        // This is intentionally a scene Canvas, not a runtime-made UI object.
+        // Its transform and child layout stay editable in BigHall's Hierarchy.
+        GameObject existingBoard = FindLoadedSceneObject(ReadyBoardCanvasName);
+        if (existingBoard != null)
+        {
+            // Migrate the first purple prototype board once.  Once the wooden
+            // parchment frame exists, keep the scene object untouched so its
+            // placement and any designer adjustments remain editable.
+            if (existingBoard.transform.Find("Ready Card/Wood Parchment Frame") != null)
+            {
+                return false;
+            }
+
+            Object.DestroyImmediate(existingBoard);
+        }
+
+        GameObject anchor = FindLoadedSceneObject(ReadyBoardAnchorName);
+        GameObject board = new GameObject(
+            ReadyBoardCanvasName,
+            typeof(RectTransform),
+            typeof(Canvas),
+            typeof(CanvasScaler),
+            typeof(GraphicRaycaster));
+
+        if (anchor != null)
+        {
+            board.transform.SetPositionAndRotation(anchor.transform.position, anchor.transform.rotation);
+        }
+        else
+        {
+            board.transform.SetPositionAndRotation(ReadyBoardAnchorPosition, Quaternion.Euler(0f, 180f, 0f));
+        }
+
+        board.transform.localScale = Vector3.one * 0.0095f;
+        Canvas canvas = board.GetComponent<Canvas>();
+        canvas.renderMode = RenderMode.WorldSpace;
+        canvas.worldCamera = Camera.main;
+        CanvasScaler scaler = board.GetComponent<CanvasScaler>();
+        scaler.uiScaleMode = CanvasScaler.ScaleMode.ConstantPixelSize;
+
+        TMP_FontAsset font = ChineseUiFontSetup.GetChineseFont() ?? TMP_Settings.defaultFontAsset;
+        GameObject card = CreateUiObject("Ready Card", board.transform);
+        SetCenteredRect(card.GetComponent<RectTransform>(), new Vector2(860f, 520f), Vector2.zero);
+
+        GameObject frame = CreateUiObject("Wood Parchment Frame", card.transform);
+        Stretch(frame.GetComponent<RectTransform>());
+        RawImage frameImage = frame.AddComponent<RawImage>();
+        frameImage.texture = AssetDatabase.LoadAssetAtPath<Texture2D>(ConnectionPanelTexturePath);
+        frameImage.color = Color.white;
+        frameImage.raycastTarget = false;
+
+        Color titleColor = new Color(0.29f, 0.15f, 0.065f, 1f);
+        Color labelColor = new Color(0.38f, 0.23f, 0.11f, 1f);
+        TextMeshProUGUI title = CreateText(frame.transform, "Title", "多人房間・準備看板", font, 40, titleColor);
+        title.fontStyle = FontStyles.Bold;
+        SetCenteredRect(title.rectTransform, new Vector2(560f, 58f), new Vector2(-70f, 160f));
+
+        TextMeshProUGUI subtitle = CreateText(frame.transform, "Subtitle", "集結小鴨，整備完畢後一起出發", font, 18, labelColor);
+        SetCenteredRect(subtitle.rectTransform, new Vector2(590f, 34f), new Vector2(-70f, 112f));
+
+        GameObject divider = CreateUiObject("Parchment Divider", frame.transform);
+        SetCenteredRect(divider.GetComponent<RectTransform>(), new Vector2(520f, 3f), new Vector2(-70f, 82f));
+        Image dividerImage = divider.AddComponent<Image>();
+        dividerImage.color = new Color(0.52f, 0.31f, 0.14f, 0.5f);
+        dividerImage.raycastTarget = false;
+
+        TextMeshProUGUI statusLabel = CreateText(frame.transform, "Status Label", "隊伍準備狀態", font, 20, labelColor);
+        statusLabel.fontStyle = FontStyles.Bold;
+        SetCenteredRect(statusLabel.rectTransform, new Vector2(500f, 34f), new Vector2(-70f, 42f));
+
+        TextMeshProUGUI status = CreateText(frame.transform, "Ready Status", "正在等待玩家…", font, 25, titleColor);
+        SetCenteredRect(status.rectTransform, new Vector2(660f, 52f), new Vector2(-35f, -5f));
+
+        Button readyButton = CreateButton(
+            frame.transform,
+            "Ready Button",
+            "準備完成",
+            font,
+            new Vector2(-70f, -103f),
+            new Vector2(390f, 76f));
+        TMP_Text label = readyButton.transform.Find("Label")?.GetComponent<TMP_Text>();
+        if (label != null)
+        {
+            label.fontSize = 27f;
+        }
+
+        TextMeshProUGUI footer = CreateText(frame.transform, "Footer", "全員準備後，房主將開啟前往第一關的傳送門", font, 16, labelColor);
+        SetCenteredRect(footer.rectTransform, new Vector2(600f, 34f), new Vector2(-70f, -172f));
+
+        // It activates only after a player joins a shared room.
+        board.SetActive(false);
+        EditorUtility.SetDirty(board);
+        return true;
+    }
+
+    private static GameObject FindLoadedSceneObject(string objectName)
+    {
+        GameObject[] objects = Resources.FindObjectsOfTypeAll<GameObject>();
+        foreach (GameObject candidate in objects)
+        {
+            if (candidate != null
+                && candidate.name == objectName
+                && candidate.scene.IsValid()
+                && candidate.scene.isLoaded)
+            {
+                return candidate;
+            }
+        }
+
+        return null;
+    }
+
     private static NetworkObject EnsurePlayerPrefab(CharacterSelectionController selection)
     {
         EnsureFolder("Assets/Prefabs");
         GameObject root = new GameObject("FusionDuckPlayer");
         NetworkObject networkObject = root.AddComponent<NetworkObject>();
-        root.AddComponent<NetworkTransform>();
+        // Each shared-room player owns and publishes only their own movement.
+        // This lets a duck regain transform authority after the lobby scene is
+        // unloaded instead of being corrected back by an old network snapshot.
+        networkObject.Flags |= NetworkObjectFlags.AllowStateAuthorityOverride;
+        NetworkTransform networkTransform = root.AddComponent<NetworkTransform>();
+        // DuckMover owns the local dynamic Rigidbody.  Do not also let
+        // NetworkTransform forecast that same physics body: the two systems
+        // can apply competing corrections immediately after a scene load,
+        // which looks like the player is being pulled or drifting.
+        SerializedObject networkTransformSettings = new SerializedObject(networkTransform);
+        SerializedProperty forecastEnabled = networkTransformSettings.FindProperty("PhysicsSettings.ForecastEnabled");
+        if (forecastEnabled != null)
+        {
+            forecastEnabled.boolValue = false;
+            networkTransformSettings.ApplyModifiedPropertiesWithoutUndo();
+        }
         FusionDuckPlayer player = root.AddComponent<FusionDuckPlayer>();
         if (root.GetComponent<DuckMover>() == null)
         {
             root.AddComponent<DuckMover>();
+        }
+
+        if (root.GetComponent<DuckWandAttack>() == null)
+        {
+            root.AddComponent<DuckWandAttack>();
         }
 
         CapsuleCollider capsule = root.AddComponent<CapsuleCollider>();
@@ -467,8 +660,47 @@ public static class FusionMultiplayerPrototypeBuilder
                 FusionDuckPlayer.GetSkinColor(i));
         }
 
+        CreateColorPlatformInstructions(platform.transform);
+
         platform.SetActive(false);
         return platform;
+    }
+
+    private static void CreateColorPlatformInstructions(Transform platform)
+    {
+        GameObject instructions = new GameObject("Color Instructions");
+        instructions.transform.SetParent(platform, false);
+        instructions.transform.localPosition = new Vector3(0f, 1.55f, 2.1f);
+        instructions.transform.localRotation = Quaternion.identity;
+
+        GameObject background = GameObject.CreatePrimitive(PrimitiveType.Cube);
+        background.name = "Background";
+        background.transform.SetParent(instructions.transform, false);
+        background.transform.localScale = new Vector3(8.6f, 1.15f, 0.08f);
+        Object.DestroyImmediate(background.GetComponent<Collider>());
+        background.GetComponent<Renderer>().sharedMaterial = GetOrCreateMaterial(
+            ColorPadMaterialFolder + "/InstructionsBackground.mat",
+            new Color(0.035f, 0.05f, 0.08f));
+
+        GameObject textObject = new GameObject("Instructions Text");
+        textObject.transform.SetParent(instructions.transform, false);
+        textObject.transform.localPosition = new Vector3(0f, 0f, -0.055f);
+
+        TextMeshPro text = textObject.AddComponent<TextMeshPro>();
+        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(NameplateFontPath);
+        text.font = font;
+        if (font != null)
+        {
+            text.fontSharedMaterial = font.material;
+        }
+
+        text.text = "踩色板更換身體顏色　｜　白色恢復原色";
+        text.alignment = TextAlignmentOptions.Center;
+        text.fontSize = 3.2f;
+        text.color = Color.white;
+        text.textWrappingMode = TextWrappingModes.NoWrap;
+        text.rectTransform.sizeDelta = new Vector2(8.2f, 1f);
+        text.raycastTarget = false;
     }
 
     private static Material GetOrCreateMaterial(string path, Color color)
@@ -508,33 +740,47 @@ public static class FusionMultiplayerPrototypeBuilder
             Object.DestroyImmediate(existingPanel.gameObject);
         }
 
-        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/UI/TmpFont/Fonts/NotoSansTC-Medium SDF.asset");
+        TMP_FontAsset font = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(NameplateFontPath);
+        Texture2D panelTexture = AssetDatabase.LoadAssetAtPath<Texture2D>(ConnectionPanelTexturePath);
         GameObject panel = CreateUiObject(PanelName, canvasTransform);
-        Image panelImage = panel.AddComponent<Image>();
-        panelImage.color = new Color(0.055f, 0.09f, 0.15f, 0.97f);
-        SetCenteredRect(panel.GetComponent<RectTransform>(), new Vector2(620f, 520f), Vector2.zero);
+        RectTransform panelRect = panel.GetComponent<RectTransform>();
+        Stretch(panelRect);
+        Image dimmer = panel.AddComponent<Image>();
+        dimmer.color = new Color(0.035f, 0.025f, 0.015f, 0.56f);
+        dimmer.raycastTarget = true;
 
-        TextMeshProUGUI title = CreateText(panel.transform, "Title", "開始遊戲", font, 34, Color.white);
-        SetCenteredRect(title.rectTransform, new Vector2(540f, 54f), new Vector2(0f, 215f));
+        GameObject frame = CreateUiObject("Wood Parchment Frame", panel.transform);
+        SetCenteredRect(frame.GetComponent<RectTransform>(), new Vector2(860f, 520f), Vector2.zero);
+        RawImage frameImage = frame.AddComponent<RawImage>();
+        frameImage.texture = panelTexture;
+        frameImage.color = Color.white;
+        frameImage.raycastTarget = false;
 
-        TextMeshProUGUI help = CreateText(panel.transform, "Help", "輸入玩家名稱；多人遊戲需使用相同房間名稱", font, 19, new Color(0.82f, 0.9f, 1f, 1f));
-        SetCenteredRect(help.rectTransform, new Vector2(540f, 40f), new Vector2(0f, 170f));
+        Color titleColor = new Color(0.29f, 0.15f, 0.065f, 1f);
+        Color labelColor = new Color(0.36f, 0.21f, 0.1f, 1f);
+        TextMeshProUGUI title = CreateText(frame.transform, "Title", "開始遊戲", font, 40, titleColor);
+        title.fontStyle = FontStyles.Bold;
+        SetCenteredRect(title.rectTransform, new Vector2(620f, 58f), new Vector2(0f, 188f));
 
-        TextMeshProUGUI nameLabel = CreateText(panel.transform, "Player Name Label", "玩家名稱", font, 17, new Color(0.75f, 0.84f, 0.95f, 1f));
+        TextMeshProUGUI help = CreateText(frame.transform, "Help", "輸入玩家名稱；多人遊戲請使用相同房間名稱", font, 19, labelColor);
+        SetCenteredRect(help.rectTransform, new Vector2(650f, 38f), new Vector2(0f, 143f));
+
+        TextMeshProUGUI nameLabel = CreateText(frame.transform, "Player Name Label", "玩家名稱", font, 19, labelColor);
         nameLabel.alignment = TextAlignmentOptions.MidlineLeft;
-        SetCenteredRect(nameLabel.rectTransform, new Vector2(410f, 28f), new Vector2(0f, 126f));
-        TMP_InputField playerNameInput = CreateTextInput(panel.transform, "Player Name Input", "輸入名字", string.Empty, font, new Vector2(0f, 88f), 16);
+        SetCenteredRect(nameLabel.rectTransform, new Vector2(520f, 28f), new Vector2(0f, 101f));
+        TMP_InputField playerNameInput = CreateTextInput(frame.transform, "Player Name Input", "輸入名字", string.Empty, font, new Vector2(0f, 64f), 16);
 
-        TextMeshProUGUI roomLabel = CreateText(panel.transform, "Room Name Label", "多人房間名稱", font, 17, new Color(0.75f, 0.84f, 0.95f, 1f));
+        TextMeshProUGUI roomLabel = CreateText(frame.transform, "Room Name Label", "多人房間名稱", font, 19, labelColor);
         roomLabel.alignment = TextAlignmentOptions.MidlineLeft;
-        SetCenteredRect(roomLabel.rectTransform, new Vector2(410f, 28f), new Vector2(0f, 38f));
-        TMP_InputField roomInput = CreateTextInput(panel.transform, "Room Name Input", "duck-room", "duck-room", font, Vector2.zero, 32);
+        SetCenteredRect(roomLabel.rectTransform, new Vector2(520f, 28f), new Vector2(0f, 18f));
+        TMP_InputField roomInput = CreateTextInput(frame.transform, "Room Name Input", "輸入或建立房間名稱", "魔法大亂鬥房間", font, new Vector2(0f, -19f), 32);
 
-        Button joinButton = CreateButton(panel.transform, "Join Shared Room Button", "建立／加入房間", font, new Vector2(0f, -82f), new Vector2(280f, 56f));
-        Button singleButton = CreateButton(panel.transform, "Play Single Player Button", "單人開始", font, new Vector2(0f, -150f), new Vector2(220f, 48f));
+        Button joinButton = CreateButton(frame.transform, "Join Shared Room Button", "建立／加入房間", font, new Vector2(-150f, -104f), new Vector2(280f, 64f));
+        Button singleButton = CreateButton(frame.transform, "Play Single Player Button", "單人開始", font, new Vector2(150f, -104f), new Vector2(240f, 64f));
 
-        TextMeshProUGUI status = CreateText(panel.transform, "Connection Status", string.Empty, font, 18, new Color(1f, 0.76f, 0.38f, 1f));
-        SetCenteredRect(status.rectTransform, new Vector2(540f, 46f), new Vector2(0f, -215f));
+        TextMeshProUGUI status = CreateText(frame.transform, "Connection Status", string.Empty, font, 18, new Color(0.65f, 0.18f, 0.08f, 1f));
+        status.fontStyle = FontStyles.Bold;
+        SetCenteredRect(status.rectTransform, new Vector2(650f, 42f), new Vector2(0f, -169f));
         panel.SetActive(false);
 
         return new ConnectionPanelRefs(panel, playerNameInput, roomInput, status, singleButton, joinButton);
@@ -550,9 +796,12 @@ public static class FusionMultiplayerPrototypeBuilder
         int characterLimit)
     {
         GameObject inputObject = CreateUiObject(objectName, parent);
-        SetCenteredRect(inputObject.GetComponent<RectTransform>(), new Vector2(410f, 52f), position);
+        SetCenteredRect(inputObject.GetComponent<RectTransform>(), new Vector2(520f, 52f), position);
         Image background = inputObject.AddComponent<Image>();
-        background.color = new Color(0.95f, 0.97f, 1f, 1f);
+        background.color = new Color(1f, 0.965f, 0.86f, 1f);
+        Outline border = inputObject.AddComponent<Outline>();
+        border.effectColor = new Color(0.43f, 0.25f, 0.11f, 0.95f);
+        border.effectDistance = new Vector2(2f, -2f);
 
         TMP_InputField input = inputObject.AddComponent<TMP_InputField>();
         GameObject viewport = CreateUiObject("Text Area", inputObject.transform);
@@ -560,11 +809,11 @@ public static class FusionMultiplayerPrototypeBuilder
         Stretch(viewportRect, 16f, 16f, 6f, 6f);
         viewport.AddComponent<RectMask2D>();
 
-        TextMeshProUGUI text = CreateText(viewport.transform, "Text", string.Empty, font, 22, new Color(0.08f, 0.1f, 0.14f, 1f));
+        TextMeshProUGUI text = CreateText(viewport.transform, "Text", string.Empty, font, 22, new Color(0.24f, 0.13f, 0.06f, 1f));
         text.alignment = TextAlignmentOptions.MidlineLeft;
         Stretch(text.rectTransform);
 
-        TextMeshProUGUI placeholder = CreateText(viewport.transform, "Placeholder", placeholderValue, font, 22, new Color(0.35f, 0.4f, 0.48f, 0.75f));
+        TextMeshProUGUI placeholder = CreateText(viewport.transform, "Placeholder", placeholderValue, font, 22, new Color(0.46f, 0.34f, 0.23f, 0.65f));
         placeholder.alignment = TextAlignmentOptions.MidlineLeft;
         placeholder.fontStyle = FontStyles.Italic;
         Stretch(placeholder.rectTransform);
@@ -582,19 +831,22 @@ public static class FusionMultiplayerPrototypeBuilder
     {
         GameObject buttonObject = CreateUiObject(name, parent);
         SetCenteredRect(buttonObject.GetComponent<RectTransform>(), size, position);
-        Image image = buttonObject.AddComponent<Image>();
-        image.color = new Color(0.18f, 0.58f, 0.86f, 1f);
+        RawImage image = buttonObject.AddComponent<RawImage>();
+        image.texture = AssetDatabase.LoadAssetAtPath<Texture2D>(ConnectionButtonTexturePath);
+        image.color = Color.white;
 
         Button button = buttonObject.AddComponent<Button>();
         button.targetGraphic = image;
         ColorBlock colors = button.colors;
-        colors.normalColor = image.color;
-        colors.highlightedColor = new Color(0.32f, 0.72f, 1f, 1f);
-        colors.pressedColor = new Color(0.1f, 0.42f, 0.7f, 1f);
-        colors.disabledColor = new Color(0.25f, 0.3f, 0.36f, 0.8f);
+        colors.normalColor = Color.white;
+        colors.highlightedColor = new Color(1f, 0.87f, 0.62f, 1f);
+        colors.pressedColor = new Color(0.86f, 0.66f, 0.4f, 1f);
+        colors.selectedColor = colors.highlightedColor;
+        colors.disabledColor = new Color(0.55f, 0.48f, 0.4f, 0.72f);
         button.colors = colors;
 
-        TextMeshProUGUI text = CreateText(buttonObject.transform, "Label", label, font, 22, Color.white);
+        TextMeshProUGUI text = CreateText(buttonObject.transform, "Label", label, font, 22, new Color(0.28f, 0.14f, 0.055f, 1f));
+        text.fontStyle = FontStyles.Bold;
         Stretch(text.rectTransform);
         return button;
     }

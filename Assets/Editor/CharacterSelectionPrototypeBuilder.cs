@@ -280,7 +280,7 @@ public static class CharacterSelectionPrototypeBuilder
             Object.DestroyImmediate(existingPanel.gameObject);
         }
 
-        TMP_FontAsset fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>("Assets/UI/TmpFont/Fonts/NotoSansTC-Medium SDF.asset");
+        TMP_FontAsset fontAsset = AssetDatabase.LoadAssetAtPath<TMP_FontAsset>(ChineseUiFontSetup.DynamicFontPath);
 
         GameObject panel = CreateUiObject(PanelName, canvasTransform);
         Image panelImage = panel.AddComponent<Image>();

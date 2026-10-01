@@ -13,6 +13,11 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
     private const float PlayerColliderRadius = 0.58f;
     private const float PlayerColliderHeight = 3.077536f;
     private const float PlayerColliderCenterY = 1.785727f;
+    // Only scale the art: collision, movement speed, and wand reach stay
+    // consistent with the existing level layout.
+    private const float MatchVisualScale = 0.88f;
+    public const int MaximumHealth = 3;
+    private const float DamageImmunityDuration = 0.8f;
 
     private static readonly Color[] SkinColors =
     {
@@ -24,6 +29,18 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
         new Color(0.65f, 0.32f, 1f)
     };
 
+    private static readonly Color[] FactionColors =
+    {
+        new Color(1f, 0.28f, 0.28f),
+        new Color(0.25f, 0.55f, 1f),
+        new Color(0.25f, 1f, 0.45f),
+        new Color(1f, 0.82f, 0.18f),
+        new Color(0.65f, 0.32f, 1f),
+        new Color(1f, 0.47f, 0.13f)
+    };
+
+    private static readonly string[] FactionNames = { "紅", "藍", "綠", "黃", "紫", "橘" };
+
     private static readonly int BaseColorProperty = Shader.PropertyToID("_BaseColor");
     private static readonly int ColorProperty = Shader.PropertyToID("_Color");
 
@@ -34,7 +51,17 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
     [Networked] public float AnimationSpeed { get; set; }
     [Networked] public NetworkBool AnimationGrounded { get; set; }
     [Networked] public int AnimationStateHash { get; set; }
+    /// <summary>0 until UNIT1's roulette assigns the player's match faction.</summary>
+    [Networked] public int FactionIndex { get; set; }
     [Networked] public int SkinColorIndex { get; set; }
+    /// <summary>Set by each player while waiting in BigHall.</summary>
+    [Networked] public NetworkBool IsReady { get; set; }
+    /// <summary>Used by the first-level enemy AI to identify wand carriers.</summary>
+    [Networked] public NetworkBool HasWand { get; set; }
+    [Networked] public int CurrentHealth { get; private set; }
+    [Networked] public NetworkBool IsEliminated { get; private set; }
+    /// <summary>Real-time expiry for the temporary shield supplied by a Guardian Wand.</summary>
+    [Networked] public float GuardianShieldUntil { get; private set; }
     [Networked] public NetworkString<_32> PlayerName { get; set; }
 
     private int appliedCharacterIndex = -1;
@@ -45,12 +72,44 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
     private MaterialPropertyBlock colorProperties;
     private DuckPlayerNameplate nameplate;
     private string appliedPlayerName = string.Empty;
+    private bool controlAuthorityConfigured;
+    private bool controlAuthorityInitialized;
+    private bool stateAuthorityRequestIssued;
+    // The persistent transfer component has already verified that this is the
+    // Runner.LocalPlayer object.  In Shared mode InputAuthority can be None,
+    // so this explicit mapping is what lets us request StateAuthority after a
+    // scene switch.
+    private bool isLocalSceneTransferPlayer;
+    private bool hasReportedControlState;
+    private bool reportedStateAuthority;
+    private bool reportedInputAuthority;
+    private bool reportedSceneTransferLocal;
+    private bool reportedBodyKinematic;
+    private bool reportedMoverEnabled;
+    private float damageImmuneUntil;
+    private bool matchVisualScaleApplied;
 
     public static int SkinColorCount => SkinColors.Length;
+    public string FactionDisplayName => GetFactionName(FactionIndex);
+    public bool IsAlive => !IsEliminated;
+    public bool HasGuardianShield => !IsEliminated && Time.time < GuardianShieldUntil;
+    public float GuardianShieldRemaining => HasGuardianShield ? GuardianShieldUntil - Time.time : 0f;
 
     public static Color GetSkinColor(int index)
     {
         return SkinColors[Mathf.Clamp(index, 0, SkinColors.Length - 1)];
+    }
+
+    public static Color GetFactionColor(int factionIndex)
+    {
+        return FactionColors[Mathf.Clamp(factionIndex - 1, 0, FactionColors.Length - 1)];
+    }
+
+    public static string GetFactionName(int factionIndex)
+    {
+        return factionIndex > 0 && factionIndex <= FactionNames.Length
+            ? FactionNames[factionIndex - 1]
+            : "未分配";
     }
 
     public void ConfigureVisuals(GameObject[] visuals, int[] materialIndices)
@@ -63,10 +122,19 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
     {
         ConfigurePlayerCollider();
         mover = GetComponent<DuckMover>();
+        ApplyMatchVisualScale();
         if (HasStateAuthority)
         {
             CharacterIndex = ClampCharacterIndex(PlayerPrefs.GetInt(SelectedCharacterIndexKey, 0));
+            // A first-level player is spawned as a new network object, so use
+            // the local colour selected on the BigHall colour pad.
             SkinColorIndex = ClampSkinColorIndex(PlayerPrefs.GetInt(SelectedSkinColorIndexKey, 0));
+            FactionIndex = 0;
+            IsReady = false;
+            HasWand = false;
+            CurrentHealth = MaximumHealth;
+            IsEliminated = false;
+            GuardianShieldUntil = 0f;
             PlayerName = SanitizePlayerName(PlayerPrefs.GetString(PlayerNameKey, DefaultPlayerName));
             CaptureAnimationState();
         }
@@ -74,7 +142,37 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
         ApplyCharacterVisual(CharacterIndex);
         ApplySkinColor(SkinColorIndex);
         ApplyPlayerName(PlayerName.ToString());
-        ConfigureAuthority();
+        EnsureControlAuthority();
+    }
+
+    private void ApplyMatchVisualScale()
+    {
+        if (matchVisualScaleApplied)
+        {
+            return;
+        }
+
+        // There are two selectable model roots, one of which is inactive.
+        // Scale both roots once so switching character never changes size.
+        Animator[] animators = GetComponentsInChildren<Animator>(true);
+        for (int i = 0; i < animators.Length; i++)
+        {
+            Animator candidate = animators[i];
+            if (candidate == null)
+            {
+                continue;
+            }
+
+            Animator parentAnimator = candidate.transform.parent != null
+                ? candidate.transform.parent.GetComponentInParent<Animator>()
+                : null;
+            if (parentAnimator == null)
+            {
+                candidate.transform.localScale *= MatchVisualScale;
+            }
+        }
+
+        matchVisualScaleApplied = true;
     }
 
     private void ConfigurePlayerCollider()
@@ -98,6 +196,8 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
         ApplyCharacterVisual(CharacterIndex);
         ApplySkinColor(SkinColorIndex);
         ApplyPlayerName(PlayerName.ToString());
+        EnsureControlAuthority();
+        ReportControlState("render");
         if (!HasStateAuthority)
         {
             ApplyRemoteAnimation();
@@ -106,10 +206,20 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
 
     public override void FixedUpdateNetwork()
     {
-        if (HasStateAuthority)
+        if (!HasStateAuthority)
+        {
+            return;
+        }
+
+        mover ??= GetComponent<DuckMover>();
+        if (IsEliminated)
         {
             CaptureAnimationState();
+            return;
         }
+
+        mover?.SimulateNetworkMovement(Runner.DeltaTime);
+        CaptureAnimationState();
     }
 
     public void SetSkinColor(int colorIndex)
@@ -126,6 +236,21 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
         ApplySkinColor(selectedColor);
     }
 
+    /// <summary>Receives the room master's draw without touching lobby skin selection.</summary>
+    public void AssignRandomFaction(int factionIndex)
+    {
+        factionIndex = Mathf.Clamp(factionIndex, 1, FactionNames.Length);
+        if (HasStateAuthority)
+        {
+            FactionIndex = factionIndex;
+        }
+
+        // This method is invoked only by the director's targeted RPC on the
+        // player's own client.  Keep the presentation local, independently
+        // from when Fusion confirms the transferred StateAuthority.
+        FactionRouletteHud.GetOrCreate().Play(factionIndex);
+    }
+
     public void SetPlayerName(string playerName)
     {
         if (!HasStateAuthority)
@@ -138,6 +263,110 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
         PlayerPrefs.SetString(PlayerNameKey, sanitizedName);
         PlayerPrefs.Save();
         ApplyPlayerName(sanitizedName);
+    }
+
+    public void SetReady(bool ready)
+    {
+        if (HasStateAuthority)
+        {
+            IsReady = ready;
+        }
+    }
+
+    public void SetHasWand(bool value)
+    {
+        if (HasStateAuthority)
+        {
+            HasWand = value && !IsEliminated;
+        }
+    }
+
+    /// <summary>Activates the Guardian Wand's short damage-immunity window.</summary>
+    public bool ActivateGuardianShield(float duration)
+    {
+        if (Object != null && !HasStateAuthority)
+        {
+            RPC_RequestGuardianShield(duration);
+            return false;
+        }
+
+        return ApplyGuardianShield(duration);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestGuardianShield(float duration)
+    {
+        ApplyGuardianShield(duration);
+    }
+
+    private bool ApplyGuardianShield(float duration)
+    {
+        if (IsEliminated || duration <= 0f)
+        {
+            return false;
+        }
+
+        GuardianShieldUntil = Time.time + duration;
+        return true;
+    }
+
+    /// <summary>Applies an enemy spell hit on this duck's StateAuthority.</summary>
+    public void TakeDamage(int damage, Vector3 hitSource)
+    {
+        if (Object != null && !HasStateAuthority)
+        {
+            RPC_RequestDamage(damage, hitSource);
+            return;
+        }
+
+        ApplyDamage(damage, hitSource);
+    }
+
+    [Rpc(RpcSources.All, RpcTargets.StateAuthority)]
+    private void RPC_RequestDamage(int damage, Vector3 hitSource)
+    {
+        ApplyDamage(damage, hitSource);
+    }
+
+    private void ApplyDamage(int damage, Vector3 hitSource)
+    {
+        if (IsEliminated || damage <= 0 || HasGuardianShield || Time.time < damageImmuneUntil)
+        {
+            return;
+        }
+
+        damageImmuneUntil = Time.time + DamageImmunityDuration;
+        CurrentHealth = Mathf.Max(0, CurrentHealth - damage);
+        if (CurrentHealth > 0)
+        {
+            return;
+        }
+
+        IsEliminated = true;
+        HasWand = false;
+        mover ??= GetComponent<DuckMover>();
+        mover?.ReleaseNetworkWand();
+        Debug.Log("[UNIT1] " + PlayerName + " 已陣亡。", this);
+    }
+
+    /// <summary>
+    /// Called only for Runner.LocalPlayer's mapped object after UNIT1 loads.
+    /// This asks Fusion to hand StateAuthority to the local mapped duck after
+    /// UNIT1 loads.  Scene placement and camera setup do not wait for that
+    /// request, but movement begins only after Fusion confirms the authority.
+    /// </summary>
+    public void EnableLocalControlFromSceneTransfer()
+    {
+        isLocalSceneTransferPlayer = true;
+        if (!HasStateAuthority && !stateAuthorityRequestIssued)
+        {
+            Object.RequestStateAuthority();
+            stateAuthorityRequestIssued = true;
+        }
+
+        controlAuthorityInitialized = false;
+        EnsureControlAuthority();
+        ReportControlState("UNIT1 scene transfer");
     }
 
     private void ApplyCharacterVisual(int characterIndex)
@@ -221,29 +450,98 @@ public sealed class FusionDuckPlayer : NetworkBehaviour
         appliedPlayerName = sanitizedName;
     }
 
-    private void ConfigureAuthority()
+    private void EnsureControlAuthority()
     {
-        bool isLocalPlayer = HasStateAuthority;
+        // InputAuthority can be None in Shared mode.  The transfer component
+        // only identifies which object should request StateAuthority; it must
+        // never become a second movement authority itself.
+        if (isLocalSceneTransferPlayer && !HasStateAuthority)
+        {
+            if (!stateAuthorityRequestIssued)
+            {
+                Object.RequestStateAuthority();
+                stateAuthorityRequestIssued = true;
+            }
+        }
+        else if (HasStateAuthority)
+        {
+            stateAuthorityRequestIssued = false;
+        }
+
+        // The owner of the network state is the sole Rigidbody writer.  Letting
+        // a locally mapped object move before StateAuthority arrives creates a
+        // Unity FixedUpdate/Fusion snapshot tug-of-war after a scene switch.
+        bool receivesLocalInput = HasStateAuthority && !IsEliminated;
+        if (controlAuthorityInitialized && controlAuthorityConfigured == receivesLocalInput)
+        {
+            return;
+        }
+
+        controlAuthorityInitialized = true;
+        controlAuthorityConfigured = receivesLocalInput;
         mover ??= GetComponent<DuckMover>();
         if (mover != null)
         {
-            mover.enabled = isLocalPlayer;
+            mover.enabled = receivesLocalInput;
         }
 
         Rigidbody body = GetComponent<Rigidbody>();
         if (body != null)
         {
-            body.isKinematic = !isLocalPlayer;
-            body.useGravity = isLocalPlayer;
+            // The local state owner uses a manual collision motor in the
+            // Fusion tick; replicas are network snapshots. Neither side may
+            // run an independent Unity gravity/velocity simulation.
+            body.isKinematic = true;
+            body.useGravity = false;
+            body.linearVelocity = Vector3.zero;
         }
 
-        if (!isLocalPlayer || Camera.main == null)
+        if (!receivesLocalInput)
         {
             return;
         }
 
-        RPGCameraFollow cameraFollow = Camera.main.GetComponent<RPGCameraFollow>();
+        RPGCameraFollow cameraFollow = RPGCameraFollow.GetOrActivateMainCamera();
         cameraFollow?.SetTarget(transform);
+    }
+
+    /// <summary>
+    /// Emits a compact state-change-only record for diagnosing scene-transfer
+    /// movement.  It deliberately avoids per-frame spam.
+    /// </summary>
+    private void ReportControlState(string source)
+    {
+        Rigidbody body = GetComponent<Rigidbody>();
+        mover ??= GetComponent<DuckMover>();
+
+        bool bodyKinematic = body != null && body.isKinematic;
+        bool moverEnabled = mover != null && mover.enabled;
+        if (hasReportedControlState
+            && reportedStateAuthority == HasStateAuthority
+            && reportedInputAuthority == HasInputAuthority
+            && reportedSceneTransferLocal == isLocalSceneTransferPlayer
+            && reportedBodyKinematic == bodyKinematic
+            && reportedMoverEnabled == moverEnabled)
+        {
+            return;
+        }
+
+        hasReportedControlState = true;
+        reportedStateAuthority = HasStateAuthority;
+        reportedInputAuthority = HasInputAuthority;
+        reportedSceneTransferLocal = isLocalSceneTransferPlayer;
+        reportedBodyKinematic = bodyKinematic;
+        reportedMoverEnabled = moverEnabled;
+
+        Debug.Log(
+            "[UNIT1-DIAG Player] " + source
+            + " | object=" + (Object != null ? Object.Id.ToString() : "none")
+            + " | stateAuthority=" + HasStateAuthority
+            + " | inputAuthority=" + HasInputAuthority
+            + " | mappedLocal=" + isLocalSceneTransferPlayer
+            + " | moverEnabled=" + moverEnabled
+            + " | kinematic=" + bodyKinematic
+            + " | gravity=" + (body != null && body.useGravity));
     }
 
     private void CaptureAnimationState()
