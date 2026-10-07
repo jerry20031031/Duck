@@ -19,7 +19,6 @@ public static class FirstLevelDuckSetup
         new Vector3(7f, 1.2f, 15f),
     };
 
-    [MenuItem("Duck/第一關/建立 UNIT1 多人遊戲內容")]
     private static void BuildPlayableFirstLevel()
     {
         // Duck1/Duck2/Duck3 in UNIT1 are map dressing, never the actual players
@@ -28,7 +27,6 @@ public static class FirstLevelDuckSetup
         Unit1MultiplayerContentBuilder.BuildAll();
     }
 
-    [MenuItem("Duck/第一關/把選取小鴨設為灰影敵人")]
     private static void MakeSelectedDuckAnEnemy()
     {
         GameObject selectedDuck = Selection.activeGameObject;
@@ -65,7 +63,6 @@ public static class FirstLevelDuckSetup
         Selection.activeGameObject = selectedDuck;
     }
 
-    [MenuItem("Duck/第一關/把選取小鴨設為玩家並加入手杖攻擊")]
     private static void GiveSelectedDuckWandAttack()
     {
         GameObject selectedDuck = Selection.activeGameObject;

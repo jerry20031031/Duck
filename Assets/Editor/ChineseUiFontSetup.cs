@@ -29,7 +29,6 @@ public static class ChineseUiFontSetup
         EditorApplication.delayCall += ApplyOnEditorLoad;
     }
 
-    [MenuItem("Duck/中文 UI/套用繁體中文字型與文案")]
     public static void ApplyChineseUi()
     {
         TMP_FontAsset font = GetChineseFont();

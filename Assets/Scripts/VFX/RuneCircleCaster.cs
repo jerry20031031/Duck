@@ -23,6 +23,11 @@ namespace DuckGame.Vfx
 
         private void Update()
         {
+            if (SceneSettingsOverlay.IsOpen)
+            {
+                return;
+            }
+
             Keyboard keyboard = Keyboard.current;
             if (keyboard == null || castKey == Key.None || !keyboard[castKey].wasPressedThisFrame)
             {

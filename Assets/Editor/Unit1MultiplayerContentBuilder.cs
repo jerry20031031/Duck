@@ -18,6 +18,7 @@ public static class Unit1MultiplayerContentBuilder
     private const string EnemyPrefabPath = "Assets/Prefabs/GreyShadowDuck.prefab";
     private const string PlayerPrefabPath = "Assets/Prefabs/FusionDuckPlayer.prefab";
     private const string CpuDuckPrefabPath = "Assets/Prefabs/Unit1CpuDuck.prefab";
+    private const string FactionCrystalPrefabPath = "Assets/Prefabs/FactionCrystal.prefab";
     private const string YellowPlayerVisualName = "Yellow Duck Visual";
     private const string BluePlayerVisualName = "Blue Duck Visual";
     // Fall back to these raw model assets only if the player prefab has not
@@ -41,6 +42,18 @@ public static class Unit1MultiplayerContentBuilder
     private const float PlayerColliderRadius = 0.58f;
     private const float PlayerColliderCenterY = 1.785727f;
 
+    private readonly struct CrystalSpawnPointPose
+    {
+        public readonly Vector3 Position;
+        public readonly Quaternion Rotation;
+
+        public CrystalSpawnPointPose(Vector3 position, Quaternion rotation)
+        {
+            Position = position;
+            Rotation = rotation;
+        }
+    }
+
     private static readonly Vector3[] PlayerPositions =
     {
         // These are centres of paved road pieces within the walled map—not
@@ -52,23 +65,38 @@ public static class Unit1MultiplayerContentBuilder
 
     private static readonly Vector3[] EnemyPositions =
     {
-        // Root height places the Grey Shadow's capsule feet on UNIT1's
-        // existing floor BoxCollider, rather than leaving it floating.
-        new(0.52f, -0.334f, 32.73f), new(6.01f, -0.334f, 32.73f), new(11.72f, -0.334f, 32.73f),
-        new(17.40f, -0.334f, 32.73f), new(27.20f, -0.334f, 32.73f), new(32.91f, -0.334f, 32.73f),
+        // Reference approaches for the director's random, flat, connected
+        // spawn search. These are not six fixed enemy starting positions.
+        new(1.05f, -0.334f, 26.00f), new(9.05f, -0.334f, 33.00f),
+        new(10.05f, -0.334f, 21.00f), new(23.05f, -0.334f, 21.00f),
+        new(24.05f, -0.334f, 32.00f), new(32.05f, -0.334f, 26.00f),
+    };
+
+    private static readonly Vector3[] FactionCrystalPositions =
+    {
+        // One base per physical map corner: north-west, north-east, then
+        // south-east. These are the actual playable-map corners, not merely
+        // points offset from the central routes. This keeps the crystals out
+        // of the central
+        // routes and makes travelling between bases meaningfully cross-map.
+        new(1.35f, -0.11f, 36.60f),
+        new(31.95f, -0.11f, 36.60f),
+        new(31.95f, -0.11f, 15.50f),
     };
 
     private static readonly WandDefinition[] Wands =
     {
-        // Six equal-distance pickups: two of each visual style. They occupy
-        // the north, west, east and southern main-road approaches rather than
-        // spawning beside the player row.
-        new("星光快攻杖 1", WeaponOnePath, WeaponOneMaterialPath, Unit1WandAbility.Swift, new Vector3(4.30f, 1.10f, 21.20f)),
-        new("水晶守護杖 1", BlueWeaponPath, BlueWeaponMaterialPath, Unit1WandAbility.Guardian, new Vector3(10.10f, 1.10f, 29.10f)),
-        new("虛空重擊杖 1", PurpleWeaponPath, PurpleWeaponMaterialPath, Unit1WandAbility.Heavy, new Vector3(17.10f, 1.10f, 24.60f)),
-        new("星光快攻杖 2", WeaponOnePath, WeaponOneMaterialPath, Unit1WandAbility.Swift, new Vector3(23.90f, 1.10f, 31.00f)),
-        new("水晶守護杖 2", BlueWeaponPath, BlueWeaponMaterialPath, Unit1WandAbility.Guardian, new Vector3(30.10f, 1.10f, 26.10f)),
-        new("虛空重擊杖 2", PurpleWeaponPath, PurpleWeaponMaterialPath, Unit1WandAbility.Heavy, new Vector3(28.10f, 1.10f, 18.80f)),
+        // Keep the original six pickups, then spread one of each ability
+        // further across the connected map for the six-shadow population.
+        new("星光快攻杖 1", WeaponOnePath, WeaponOneMaterialPath, Unit1WandAbility.Swift, new Vector3(1.05f, 1.10f, 19.00f)),
+        new("水晶守護杖 1", BlueWeaponPath, BlueWeaponMaterialPath, Unit1WandAbility.Guardian, new Vector3(16.55f, 1.10f, 19.00f)),
+        new("虛空重擊杖 1", PurpleWeaponPath, PurpleWeaponMaterialPath, Unit1WandAbility.Heavy, new Vector3(32.05f, 1.10f, 19.00f)),
+        new("星光快攻杖 2", WeaponOnePath, WeaponOneMaterialPath, Unit1WandAbility.Swift, new Vector3(1.05f, 1.10f, 33.00f)),
+        new("水晶守護杖 2", BlueWeaponPath, BlueWeaponMaterialPath, Unit1WandAbility.Guardian, new Vector3(16.55f, 1.10f, 28.00f)),
+        new("虛空重擊杖 2", PurpleWeaponPath, PurpleWeaponMaterialPath, Unit1WandAbility.Heavy, new Vector3(32.05f, 1.10f, 33.00f)),
+        new("星光快攻杖 3", WeaponOnePath, WeaponOneMaterialPath, Unit1WandAbility.Swift, new Vector3(1.51f, 1.10f, 54.17f)),
+        new("虛空重擊杖 3", PurpleWeaponPath, PurpleWeaponMaterialPath, Unit1WandAbility.Heavy, new Vector3(43.34f, 1.10f, 47.48f)),
+        new("水晶守護杖 3", BlueWeaponPath, BlueWeaponMaterialPath, Unit1WandAbility.Guardian, new Vector3(26.61f, 1.10f, 94.32f)),
     };
 
     static Unit1MultiplayerContentBuilder()
@@ -105,7 +133,6 @@ public static class Unit1MultiplayerContentBuilder
         BuildRequestedContent();
     }
 
-    [MenuItem("Duck/建立多人準備大廳與 UNIT1 第一關")]
     public static void BuildAll()
     {
         Scene original = EditorSceneManager.GetActiveScene();
@@ -125,12 +152,75 @@ public static class Unit1MultiplayerContentBuilder
         BuildAll();
     }
 
+    // A focused, idempotent upgrade for the existing authored scene. Never
+    // run BuildAll here: it recreates the map's content and spawn markers.
+    [MenuItem("Tools/UNIT1 Content/Apply 6 Shadows and 9 Wands")]
+    public static void ApplySixShadowsAndNineWands()
+    {
+        if (EditorApplication.isPlayingOrWillChangePlaymode || EditorApplication.isCompiling || EditorApplication.isUpdating)
+            throw new System.InvalidOperationException("Run after compilation in edit mode.");
+        for (int i = 0; i < SceneManager.sceneCount; i++)
+            if (SceneManager.GetSceneAt(i).isDirty)
+                throw new System.InvalidOperationException("Unsaved scene changes: content upgrade cancelled.");
+        for (int i = 6; i < Wands.Length; i++)
+            if (AssetDatabase.LoadAssetAtPath<GameObject>(Wands[i].AssetPath) == null
+                || AssetDatabase.LoadAssetAtPath<Material>(Wands[i].MaterialPath) == null)
+                throw new System.InvalidOperationException("Missing wand model or material: " + Wands[i].Name);
+
+        Scene previous = SceneManager.GetActiveScene();
+        Scene scene = SceneManager.GetSceneByPath(Unit1ScenePath);
+        bool opened = !scene.IsValid() || !scene.isLoaded;
+        if (opened) scene = EditorSceneManager.OpenScene(Unit1ScenePath, OpenSceneMode.Additive);
+        try
+        {
+            SceneManager.SetActiveScene(scene);
+            GameObject root = FindSceneObject(scene, ContentRootName);
+            Transform wandRoot = root != null ? root.transform.Find("Hand Wands - E to Pick Up") : null;
+            GameObject directorObject = FindSceneObject(scene, DirectorName);
+            Unit1GameDirector director = directorObject != null ? directorObject.GetComponent<Unit1GameDirector>() : null;
+            if (wandRoot == null || director == null)
+                throw new System.InvalidOperationException("Existing UNIT1 content missing; no scene saved.");
+            for (int i = 0; i < 6; i++)
+                if (wandRoot.Find(Wands[i].Name)?.GetComponent<Unit1WandPickup>() == null)
+                    throw new System.InvalidOperationException("Original wand missing: " + Wands[i].Name);
+            for (int i = 6; i < Wands.Length; i++)
+            {
+                Transform existing = wandRoot.Find(Wands[i].Name);
+                if (existing != null && existing.GetComponent<Unit1WandPickup>() == null)
+                    throw new System.InvalidOperationException("Name collision: " + Wands[i].Name);
+            }
+
+            var serializedDirector = new SerializedObject(director);
+            serializedDirector.FindProperty("enemyCount").intValue = 6;
+            serializedDirector.ApplyModifiedPropertiesWithoutUndo();
+            int added = 0;
+            for (int i = 6; i < Wands.Length; i++)
+            {
+                if (wandRoot.Find(Wands[i].Name) != null) continue;
+                CreateWand(wandRoot, Wands[i]);
+                added++;
+            }
+            EditorSceneManager.MarkSceneDirty(scene);
+            if (!EditorSceneManager.SaveScene(scene))
+                throw new System.InvalidOperationException("Could not save UNIT1 density upgrade.");
+            Debug.Log("[DENSITY-SETUP] six Grey Shadows, nine wands (three per ability); added=" + added
+                + ". Existing six wands, map, crystals and spawn markers preserved.");
+        }
+        finally
+        {
+            if (previous.IsValid() && previous.isLoaded) SceneManager.SetActiveScene(previous);
+            if (opened) EditorSceneManager.CloseScene(scene, true);
+        }
+    }
+
     private static void BuildUnit1(Scene unit1)
     {
         NetworkObject enemyPrefab = CreateGreyShadowDuckPrefab();
         NetworkObject cpuDuckPrefab = CreateCpuDuckPrefab();
+        NetworkObject factionCrystalPrefab = CreateFactionCrystalPrefab();
 
         GameObject oldRoot = FindSceneObject(unit1, ContentRootName);
+        CrystalSpawnPointPose[] crystalSpawnPointPoses = CaptureCrystalSpawnPointPoses(oldRoot);
         if (oldRoot != null)
         {
             Object.DestroyImmediate(oldRoot);
@@ -141,13 +231,15 @@ public static class Unit1MultiplayerContentBuilder
         pointsRoot.transform.SetParent(root.transform, false);
         Transform[] playerPoints = CreatePoints(pointsRoot.transform, "Player Spawn", PlayerPositions, new Color(0.26f, 0.58f, 1f, 1f));
         Transform[] enemyPoints = CreatePoints(pointsRoot.transform, "Grey Shadow Spawn", EnemyPositions, new Color(0.65f, 0.32f, 1f, 1f));
+        Transform[] crystalPoints = CreatePoints(pointsRoot.transform, "Faction Crystal Base", FactionCrystalPositions, new Color(0.82f, 0.88f, 1f, 1f));
+        RestoreCrystalSpawnPointPoses(crystalPoints, crystalSpawnPointPoses);
         CreateWands(root.transform);
 
         GameObject directorObject = new(DirectorName);
         directorObject.transform.SetParent(root.transform, false);
         directorObject.AddComponent<NetworkObject>();
         Unit1GameDirector director = directorObject.AddComponent<Unit1GameDirector>();
-        director.Configure(enemyPrefab, cpuDuckPrefab, playerPoints, enemyPoints, 3);
+        director.Configure(enemyPrefab, cpuDuckPrefab, factionCrystalPrefab, playerPoints, enemyPoints, crystalPoints, 6);
 
         EditorUtility.SetDirty(directorObject);
         EditorSceneManager.MarkSceneDirty(unit1);
@@ -155,7 +247,77 @@ public static class Unit1MultiplayerContentBuilder
         AssetDatabase.SaveAssets();
         NetworkProjectConfigUtilities.RebuildPrefabTable();
         Selection.activeGameObject = directorObject;
-        Debug.Log("UNIT1 multiplayer content is ready: 1–6 human players, CPU ducks filling matches to four, six material-equipped network wands, and the Grey Shadow Duck prefab.");
+        Debug.Log("UNIT1 multiplayer content is ready: 1–6 human players, CPU ducks, nine network wands, three faction crystals, and six Grey Shadows.");
+    }
+
+    /// <summary>
+    /// Crystal locations are laid out by the scene designer. Preserve their
+    /// latest world transforms before a content rebuild destroys the generated
+    /// root, then restore them on the replacement spawn-point objects.
+    /// </summary>
+    private static CrystalSpawnPointPose[] CaptureCrystalSpawnPointPoses(GameObject contentRoot)
+    {
+        if (contentRoot == null)
+        {
+            return null;
+        }
+
+        Transform pointsRoot = contentRoot.transform.Find("Spawn Points");
+        if (pointsRoot == null)
+        {
+            return null;
+        }
+
+        CrystalSpawnPointPose[] poses = new CrystalSpawnPointPose[FactionTeam.Count];
+        for (int index = 0; index < poses.Length; index++)
+        {
+            Transform point = pointsRoot.Find("Faction Crystal Base " + (index + 1));
+            if (point == null)
+            {
+                return null;
+            }
+
+            poses[index] = new CrystalSpawnPointPose(point.position, point.rotation);
+        }
+
+        return poses;
+    }
+
+    private static void RestoreCrystalSpawnPointPoses(
+        Transform[] crystalPoints,
+        CrystalSpawnPointPose[] savedPoses)
+    {
+        if (crystalPoints == null || savedPoses == null)
+        {
+            return;
+        }
+
+        int count = Mathf.Min(crystalPoints.Length, savedPoses.Length);
+        for (int index = 0; index < count; index++)
+        {
+            if (crystalPoints[index] != null)
+            {
+                crystalPoints[index].SetPositionAndRotation(
+                    savedPoses[index].Position,
+                    savedPoses[index].Rotation);
+            }
+        }
+    }
+
+    private static NetworkObject CreateFactionCrystalPrefab()
+    {
+        EnsureFolder("Assets/Prefabs");
+        GameObject root = new("Faction Crystal", typeof(NetworkObject), typeof(NetworkTransform), typeof(FactionCrystal));
+        SphereCollider collider = root.AddComponent<SphereCollider>();
+        collider.center = new Vector3(0f, 1.15f, 0f);
+        collider.radius = 1.35f;
+        collider.isTrigger = true;
+
+        PrefabUtility.SaveAsPrefabAsset(root, FactionCrystalPrefabPath);
+        Object.DestroyImmediate(root);
+        AssetDatabase.ImportAsset(FactionCrystalPrefabPath, ImportAssetOptions.ForceUpdate);
+        GameObject saved = AssetDatabase.LoadAssetAtPath<GameObject>(FactionCrystalPrefabPath);
+        return saved != null ? saved.GetComponent<NetworkObject>() : null;
     }
 
     private static NetworkObject CreateCpuDuckPrefab()
@@ -185,16 +347,19 @@ public static class Unit1MultiplayerContentBuilder
             Object.DestroyImmediate(humanController);
         }
 
-        DuckMover mover = root.GetComponent<DuckMover>();
-        if (mover != null)
-        {
-            Object.DestroyImmediate(mover);
-        }
-
         DuckWandAttack wandAttack = root.GetComponent<DuckWandAttack>();
         if (wandAttack != null)
         {
             Object.DestroyImmediate(wandAttack);
+        }
+
+        // DuckWandAttack requires DuckMover. Remove the dependent attack
+        // script first; otherwise Unity refuses to remove the player's input
+        // mover and the CPU prefab can receive unintended local controls.
+        DuckMover mover = root.GetComponent<DuckMover>();
+        if (mover != null)
+        {
+            Object.DestroyImmediate(mover);
         }
 
         if (root.GetComponent<Unit1BotDuck>() == null)
@@ -216,8 +381,10 @@ public static class Unit1MultiplayerContentBuilder
         // Slot 0 is the duck's skin.  Keep the other slots on their original
         // textured materials so the bill, eyes, and all other duck details
         // retain their usual colours.
-        Material bodyMaterial = GetOrCreateMaterial(BodyMaterialPath, Color.black, 0.15f);
-        Material runeMaterial = GetOrCreateMaterial(RuneMaterialPath, new Color(0.65f, 0.32f, 1f, 1f), 0.45f);
+        Material bodyMaterial = GetOrCreateMaterial(BodyMaterialPath, Color.black, 0f);
+        Material runeMaterial = GetOrCreateMaterial(RuneMaterialPath, new Color(0.65f, 0.32f, 1f, 1f), 0f);
+        ConfigureMatteShadowMaterial(bodyMaterial);
+        ConfigureMatteShadowMaterial(runeMaterial);
         if (runeMaterial.HasProperty("_EmissionColor"))
         {
             runeMaterial.EnableKeyword("_EMISSION");
@@ -424,6 +591,7 @@ public static class Unit1MultiplayerContentBuilder
         SphereCollider pickupCollider = wand.AddComponent<SphereCollider>();
         pickupCollider.center = Vector3.zero;
         pickupCollider.radius = 0.85f;
+        pickupCollider.isTrigger = true;
         wand.GetComponent<Unit1WandPickup>().Configure(visual.transform, definition.Ability);
     }
 
@@ -475,6 +643,22 @@ public static class Unit1MultiplayerContentBuilder
         if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", smoothness);
         EditorUtility.SetDirty(material);
         return material;
+    }
+
+    private static void ConfigureMatteShadowMaterial(Material material)
+    {
+        if (material == null)
+        {
+            return;
+        }
+
+        // Grey Shadows should read as ink-like shadow, not polished plastic.
+        // Keep the rune's emission but remove every lit-material reflection.
+        if (material.HasProperty("_Metallic")) material.SetFloat("_Metallic", 0f);
+        if (material.HasProperty("_Smoothness")) material.SetFloat("_Smoothness", 0f);
+        if (material.HasProperty("_SpecularHighlights")) material.SetFloat("_SpecularHighlights", 0f);
+        if (material.HasProperty("_GlossyReflections")) material.SetFloat("_GlossyReflections", 0f);
+        EditorUtility.SetDirty(material);
     }
 
     private static GameObject FindSceneObject(Scene scene, string objectName)
