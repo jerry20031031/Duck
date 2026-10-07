@@ -10,7 +10,6 @@ public static class ReplaceDuck1Model
     private const string ScenePath = "Assets/Scenes/UNIT1.unity";
     private const string NewDuckModelPath = "Assets/people/1/00991177a1.fbx";
 
-    [MenuItem("Duck Tools/Replace Duck1 With 00991177a1")]
     public static void ReplaceDuck1()
     {
         EnsureTargetSceneIsOpen();

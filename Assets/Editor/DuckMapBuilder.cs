@@ -29,7 +29,6 @@ public static class DuckMapBuilder
         public GameObject Tree;
     }
 
-    [MenuItem("Duck/Build Complete Map")]
     public static void BuildCompleteMapInCurrentScene()
     {
         BuildMap(EditorSceneManager.GetActiveScene());
@@ -41,7 +40,6 @@ public static class DuckMapBuilder
         EditorApplication.delayCall += TryRunPendingAutoBuild;
     }
 
-    [MenuItem("Duck/Rebuild UNIT1 Map")]
     public static void RebuildUnit1Scene()
     {
         Scene scene = EditorSceneManager.OpenScene(UnitScenePath, OpenSceneMode.Single);

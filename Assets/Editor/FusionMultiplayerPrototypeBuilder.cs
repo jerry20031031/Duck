@@ -38,7 +38,6 @@ public static class FusionMultiplayerPrototypeBuilder
         EditorApplication.delayCall += EnsureReadyBoardCanvasInBigHall;
     }
 
-    [MenuItem("Duck/Setup Fusion Multiplayer Prototype")]
     public static void SetupFusionMultiplayerPrototype()
     {
         Scene scene = EditorSceneManager.GetActiveScene();

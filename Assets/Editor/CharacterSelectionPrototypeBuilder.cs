@@ -44,7 +44,6 @@ public static class CharacterSelectionPrototypeBuilder
         EditorApplication.delayCall += AutoSetupIfBigHallIsOpen;
     }
 
-    [MenuItem("Duck/Setup Character Select Prototype")]
     public static void SetupCharacterSelectPrototype()
     {
         EnsureMainMenuLoadsBigHall();
